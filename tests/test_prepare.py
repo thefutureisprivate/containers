@@ -21,6 +21,10 @@ class PreparationTests(unittest.TestCase):
                          prepare.comparable("ExposedPorts", {"9094/udp": {}}))
         self.assertNotEqual(prepare.comparable("ExposedPorts", {"9094/udp": {}}),
                             prepare.comparable("ExposedPorts", {"9094/tcp": {}}))
+        self.assertEqual(prepare.comparable("Entrypoint", None), prepare.comparable("Entrypoint", []))
+        self.assertNotEqual(prepare.comparable("Entrypoint", None), prepare.comparable("Entrypoint", ["/app"]))
+        self.assertEqual(prepare.comparable("WorkingDir", None), prepare.comparable("WorkingDir", "/"))
+        self.assertNotEqual(prepare.comparable("WorkingDir", None), prepare.comparable("WorkingDir", "/data"))
 
     def test_scratch_rejects_dynamic_elf_without_running_it(self):
         for program_type in (1, 3):

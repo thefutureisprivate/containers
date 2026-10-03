@@ -70,9 +70,13 @@ def comparable(field, value):
         return sorted(value or [])
     if field in ("Volumes", "ExposedPorts"):
         return sorted(value or {})
+    if field in ("Entrypoint", "Cmd"):
+        return value or []
+    if field == "WorkingDir":
+        return value or "/"
     if field == "Healthcheck" and value:
         return {key: val for key, val in value.items() if val is not None and val != 0}
-    return value
+    return value or None
 
 
 def static_elf(stream):
