@@ -56,6 +56,24 @@ def podman(*args, capture=False, merge_stderr=False):
                           stderr=subprocess.STDOUT if merge_stderr else None).stdout
 
 
+def runtime_config(info):
+    config = dict(info["Config"])
+    for key in ("Healthcheck", "HealthCheck"):
+        if info.get(key):
+            config["Healthcheck"] = info[key]
+    return config
+
+
+def comparable(field, value):
+    if field == "Env":
+        return sorted(value or [])
+    if field in ("Volumes", "ExposedPorts"):
+        return sorted(value or {})
+    if field == "Healthcheck" and value:
+        return {key: val for key, val in value.items() if val is not None and val != 0}
+    return value
+
+
 def static_elf(stream):
     """Reject dynamically linked binaries without executing an untrusted ldd."""
     header = stream.read(64)
@@ -166,10 +184,7 @@ def prepare(name):
         info = json.loads(podman("image", "inspect", tag, capture=True))[0]
         if info["Architecture"] != "amd64" or info["Os"] != "linux":
             raise ValueError("Only linux/amd64 is configured in OBS")
-        config = info["Config"]
-        # Podman versions expose Docker-only health metadata in either place.
-        if info.get("Healthcheck"):
-            config["Healthcheck"] = info["Healthcheck"]
+        config = runtime_config(info)
         container = podman("create", "--pull=never", "--network=none", "--image-volume=ignore",
                            "--entrypoint=/not-executed", tag, capture=True).strip()
         try:
@@ -194,13 +209,11 @@ def prepare(name):
         (tmp / "provenance.json").write_text(json.dumps(provenance, indent=2, sort_keys=True) + "\n")
         # Check the exact generated recipe that OBS will build, including xattrs.
         podman("build", "--format=docker", "--pull=never", "--network=none", "--tag", tag, str(tmp))
-        rebuilt = json.loads(podman("image", "inspect", tag, capture=True))[0]["Config"]
+        rebuilt = runtime_config(json.loads(podman("image", "inspect", tag, capture=True))[0])
         for field in ("Env", "User", "WorkingDir", "Entrypoint", "Cmd", "Volumes", "ExposedPorts", "StopSignal", "Healthcheck"):
-            expected, actual = config.get(field), rebuilt.get(field)
-            if field == "Env":
-                expected, actual = sorted(expected or []), sorted(actual or [])
+            expected, actual = comparable(field, config.get(field)), comparable(field, rebuilt.get(field))
             if expected != actual:
-                raise ValueError(f"{name}: offline recipe changed runtime configuration ({field})")
+                raise ValueError(f"{name}: offline recipe changed runtime configuration ({field}): {expected!r} -> {actual!r}")
         target = OUT / name
         if target.exists():
             shutil.rmtree(target)

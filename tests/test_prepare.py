@@ -13,6 +13,15 @@ SPEC.loader.exec_module(prepare)
 
 
 class PreparationTests(unittest.TestCase):
+    def test_podman_metadata_location_and_empty_port_values(self):
+        health = {"Test": ["CMD", "/app", "check"], "Interval": 1000}
+        for key in ("Healthcheck", "HealthCheck"):
+            self.assertEqual(prepare.runtime_config({"Config": {}, key: health})["Healthcheck"], health)
+        self.assertEqual(prepare.comparable("ExposedPorts", {"9094/udp": None}),
+                         prepare.comparable("ExposedPorts", {"9094/udp": {}}))
+        self.assertNotEqual(prepare.comparable("ExposedPorts", {"9094/udp": {}}),
+                            prepare.comparable("ExposedPorts", {"9094/tcp": {}}))
+
     def test_scratch_rejects_dynamic_elf_without_running_it(self):
         for program_type in (1, 3):
             binary = bytearray(120)
