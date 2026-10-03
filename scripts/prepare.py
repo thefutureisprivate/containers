@@ -16,6 +16,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / ".build/obs"
+RUNTIME_FIELDS = ("Env", "User", "WorkingDir", "Entrypoint", "Cmd", "Volumes", "ExposedPorts", "StopSignal", "Healthcheck")
 PIN = re.compile(r"^FROM ([a-z0-9./_-]+):([A-Za-z0-9_.-]+)@sha256:([0-9a-f]{64})(?: AS upstream)?$", re.M)
 
 
@@ -129,10 +130,14 @@ def render(name, version, config):
         lines.append("LABEL " + json.dumps(key) + "=" + json.dumps(value).replace("$", r"\$"))
     lines += [f'LABEL org.opencontainers.image.source="https://github.com/thefutureisprivate/containers"',
               f'LABEL org.opencontainers.image.version="{version}"']
-    for port in sorted(config.get("ExposedPorts") or {}):
+    ports = sorted(config.get("ExposedPorts") or {})
+    for port in ports:
         if not re.fullmatch(r"\d+/(?:tcp|udp|sctp)", port):
             raise ValueError("Invalid exposed port")
-        lines.append("EXPOSE " + port)
+    if ports:
+        # Older Buildah versions lose one protocol when a port is exposed in
+        # separate instructions. Preserve TCP+UDP together in one instruction.
+        lines.append("EXPOSE " + " ".join(ports))
     for key, instruction in (("WorkingDir", "WORKDIR"), ("User", "USER"), ("StopSignal", "STOPSIGNAL")):
         value = config.get(key)
         if value:
@@ -210,7 +215,7 @@ def prepare(name):
         # Check the exact generated recipe that OBS will build, including xattrs.
         podman("build", "--format=docker", "--pull=never", "--network=none", "--tag", tag, str(tmp))
         rebuilt = runtime_config(json.loads(podman("image", "inspect", tag, capture=True))[0])
-        for field in ("Env", "User", "WorkingDir", "Entrypoint", "Cmd", "Volumes", "ExposedPorts", "StopSignal", "Healthcheck"):
+        for field in RUNTIME_FIELDS:
             expected, actual = comparable(field, config.get(field)), comparable(field, rebuilt.get(field))
             if expected != actual:
                 raise ValueError(f"{name}: offline recipe changed runtime configuration ({field}): {expected!r} -> {actual!r}")

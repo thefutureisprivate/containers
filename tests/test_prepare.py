@@ -47,6 +47,11 @@ class PreparationTests(unittest.TestCase):
                             'HEALTHCHECK --interval=1000000000ns CMD ["/app", "healthcheck"]'):
             self.assertIn(instruction, text)
 
+    def test_dual_protocol_ports_share_an_expose_instruction(self):
+        text = prepare.render("alertmanager", "1.0.0", {"ExposedPorts": {"9094/tcp": {}, "9094/udp": {}}})
+        self.assertIn("EXPOSE 9094/tcp 9094/udp\n", text)
+        self.assertEqual(text.count("EXPOSE "), 1)
+
     def test_unreviewed_onbuild_and_instruction_injection_rejected(self):
         for config in ({"OnBuild": ["RUN unreviewed"]}, {"User": "user\nRUN bad"}, {"ExposedPorts": {"80\nRUN bad": {}}}):
             with self.assertRaises(ValueError):

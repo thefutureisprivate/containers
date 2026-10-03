@@ -10,7 +10,7 @@ import time
 import xml.etree.ElementTree as ET
 
 import obs
-from prepare import images, recipe
+from prepare import RUNTIME_FIELDS, comparable, images, recipe
 
 
 def embedded_provenance(directory):
@@ -54,6 +54,13 @@ def verify_all(timeout):
                         expected = (obs.ROOT / ".build/obs" / name / "provenance.json").read_bytes()
                         if embedded_provenance(directory) != expected:
                             raise ValueError(f"{name}: signed image provenance does not match this checkout's prepared sources")
+                        manifest = json.loads((directory / "manifest.json").read_text())
+                        digest = manifest["config"]["digest"].split(":", 1)[1]
+                        config = json.loads((directory / digest).read_text())["config"]
+                        original = json.loads(expected)["runtime_config"]
+                        for field in RUNTIME_FIELDS:
+                            if comparable(field, config.get(field)) != comparable(field, original.get(field)):
+                                raise ValueError(f"{name}: signed OBS image changed runtime configuration ({field})")
                 except subprocess.CalledProcessError:
                     # Registry publication and its signature store may lag OBS.
                     continue
