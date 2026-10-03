@@ -1,0 +1,15 @@
+<project name="home:thefutureisprivate:containers">
+  <title>Signed application containers</title>
+  <description>Application container images built from source in OBS and signed with the OBS project key. The initial hello image demonstrates a static, non-root scratch runtime.</description>
+  <person userid="thefutureisprivate" role="maintainer"/>
+  <build>
+    <enable/>
+  </build>
+  <publish>
+    <enable/>
+  </publish>
+  <repository name="containers">
+    <path project="openSUSE:Containers:Tumbleweed" repository="containers"/>
+    <arch>x86_64</arch>
+  </repository>
+</project>

@@ -1,0 +1,3 @@
+{
+  "hello": ["Dockerfile", "go.mod", "main.go"]
+}
