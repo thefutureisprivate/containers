@@ -2,7 +2,7 @@
 
 Recommendation: use `scratch` for applications that can ship as a self-contained static executable. Use a supported Alpine release when a workload needs musl, a language runtime, or shell tooling and those requirements have been tested on Alpine. Choose per application; neither option is universally more secure.
 
-This repository starts with a static Go example because no application workload has been specified. It is an application-container pipeline, separate from the ParticleOS host operating system.
+The five Go monitoring images use scratch after static-link validation, with a CA bundle and upstream licenses. Kanidm uses its upstream scratch filesystem with required dynamic libraries. PostgreSQL uses its supported Alpine variant. RADIUS and Stalwart retain their upstream openSUSE and Debian runtimes: a switch to musl would need separate compatibility and integration testing.
 
 | Consideration | `scratch` runtime | Alpine runtime |
 | --- | --- | --- |
@@ -30,6 +30,6 @@ Host isolation remains necessary: use a non-root runtime, a read-only filesystem
 
 ## OBS implications
 
-The builder uses openSUSE repositories because they already integrate with OBS dependency resolution. That does not make the runtime an openSUSE image. The second Dockerfile stage starts empty and copies only the application. There is no reason to introduce an Alpine runtime for this particular executable.
+OBS workers are offline. The preparation script downloads the exact upstream image digest before submission, exports the chosen runtime, and generates a scratch-plus-rootfs recipe. For PostgreSQL, RADIUS and Stalwart this rootfs still contains the entire upstream distribution; writing `FROM scratch` in the generated recipe does not make those runtimes minimal or remove their package dependencies.
 
-If a future application needs Alpine, add a distinct, tested recipe and arrange its base image and APK dependencies through OBS repositories/source services. Do not assume a Docker Hub `FROM alpine` plus online `apk add` will work in an offline OBS worker. Keep release updates and signature verification part of that recipe's lifecycle. [OBS Dockerfile build rules](https://openbuildservice.org/help/manuals/obs-user-guide/cha-obs-supported-formats.html)
+The signed provenance records the upstream digest and local input/archive hashes. Dependabot updates real Dockerfile image references through PRs, and CI rebuilds and tests the runtime before publication. OBS assembles and signs the final application images; only the hello demonstration is compiled from source within OBS. [OBS Dockerfile build rules](https://openbuildservice.org/help/manuals/obs-user-guide/cha-obs-supported-formats.html)

@@ -1,0 +1,4 @@
+# Immutable upstream input; Dependabot updates the tag and digest in PRs.
+FROM docker.io/kanidm/server:1.11.2@sha256:e45f00bd354c1fc1c06a4be484b4e87b094c431e78280f1d19e911815e63efb5
+USER 65532:65532
+VOLUME ["/data"]

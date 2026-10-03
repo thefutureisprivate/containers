@@ -1,92 +1,112 @@
-# OBS containers
+# Signed OBS containers
 
-Build application containers from source in [home:thefutureisprivate:containers](https://build.opensuse.org/project/show/home:thefutureisprivate:containers), sign them with the OBS project key, and publish them to `registry.opensuse.org`.
+Recipes for [home:thefutureisprivate:containers](https://build.opensuse.org/project/show/home:thefutureisprivate:containers), maintained in [thefutureisprivate/containers](https://github.com/thefutureisprivate/containers). OBS builds the final images offline, signs them with its project key, and publishes them to `registry.opensuse.org`.
 
-The initial `hello` image demonstrates a static Go executable in a `scratch` runtime, running as UID/GID `65532`. It prints a message and exits. It is a working example to replace with your application, not a server OS image. The openSUSE build stage supplies the compiler; the runtime contains only `/hello`.
+The application images **repackage official upstream binaries pinned by tag and SHA-256 digest**. They do not independently compile those applications from source. The small `hello` example does compile from source in OBS.
 
-See [the Alpine versus scratch evaluation](docs/base-images.md) for the security decision and limitations.
+## Images
 
-## Build and publish
+All images currently target **linux/amd64**. Append the package name and tag to:
 
-Requirements: Python 3.10+, Make, GnuPG, an OBS account with access to this project, and Skopeo for verification. There are no Python dependencies. `osc` is optional.
+```text
+registry.opensuse.org/home/thefutureisprivate/containers/containers/
+```
+
+| Package | Initial version | Runtime |
+| --- | --- | --- |
+| `kanidm` | 1.11.2 | Upstream scratch, required glibc libraries; UID/GID 65532 |
+| `kanidm-radius` | 1.11.2 | Upstream openSUSE/FreeRADIUS/native Kanidm module; `radiusd` user |
+| `stalwart` | 0.16.24 | Upstream Debian runtime; `stalwart` user |
+| `prometheus` | 3.15.0 | Scratch, static binaries and CA bundle; UID/GID 65532 |
+| `blackbox-exporter` | 0.28.0 | Scratch, static binary and CA bundle; UID/GID 65532 |
+| `postgres-exporter` | 0.20.1 | Scratch, static binary and CA bundle; UID/GID 65532 |
+| `node-exporter` | 1.12.1 | Scratch, static binary and CA bundle; UID/GID 65532 |
+| `alertmanager` | 0.34.1 | Scratch, static binaries and CA bundle; UID/GID 65532 |
+| `postgresql` | 18.6-alpine3.24 | Official PostgreSQL Alpine runtime and initialization entrypoint |
+
+The table records the initial setup; **the Dockerfiles are the current version source of truth**. OBS publishes `NAME:VERSION-<RELEASE>`, `NAME:VERSION`, and `NAME:latest`. A pinned upstream digest is an integrity pin, not a verified upstream publisher signature. OBS signs the result under this project's identity.
+
+See [Alpine versus scratch](docs/base-images.md) for the security tradeoffs.
+
+## Dependabot and publication
+
+[Dependabot](.github/dependabot.yml) checks all nine upstream image tags/digests daily and pinned GitHub Actions weekly. Updates arrive as PRs; they are not automatically merged. Kanidm and RADIUS updates are grouped when available together. PostgreSQL major releases require a reviewed PR and a database migration plan.
+
+The [workflow](.github/workflows/containers.yml) runs unit checks, builds each generated offline recipe, and smoke tests the result on PRs. PR jobs have read-only GitHub permissions and no OBS credential. On `main`, after all checks pass, one serialized publisher prepares the contexts, submits complete OBS source revisions, waits for publication, verifies signatures, and checks embedded provenance against its inputs. An older workflow checks for a newer `main` commit before publishing.
+
+**One-time setup:** add the repository Actions secret **`OBS_CREDENTIALS`** in [Settings → Secrets and variables → Actions](https://github.com/thefutureisprivate/containers/settings/secrets/actions). Its value is an OBS credential file, for example:
+
+```json
+{"username":"thefutureisprivate","password":"YOUR_OBS_PASSWORD"}
+```
+
+The existing `/tmp/obs-creds` format (username/password on separate lines, with an optional leading label) also works. The secret is exposed only to the publication step on `main`, written to a temporary file with mode 600, and removed afterward. Never commit it. Anyone able to change and run a trusted `main` workflow can use its Actions secrets; restrict repository write access and protect `main` as appropriate.
+
+The publication job reports a missing secret explicitly. After adding it, rerun the failed job or use **Run workflow** on `main`.
+
+## Local build and publish
+
+Requirements: Python 3.11+, Make, Podman, GnuPG, Skopeo, working container user namespaces, and storage for the image runtimes. No Python packages are required. `PODMAN_COMMAND='sudo podman'` can select a rootful installation.
 
 ```sh
 make check
+make prepare
+make smoke
 
-# Keep this file outside Git. JSON format is shown below.
-export OBS_CREDENTIALS_FILE=/path/to/obs-credentials.json
+export OBS_CREDENTIALS_FILE=/path/outside/repository/obs-credentials.json
 make bootstrap
 make publish
+python3 scripts/verify_all.py --timeout 1800
+```
+
+For one image:
+
+```sh
+python3 scripts/prepare.py prometheus
+python3 scripts/smoke.py prometheus
+python3 scripts/obs.py publish prometheus
 make status
-make log
+make log IMAGE=prometheus
 ```
 
-Credential file format (restrict it with `chmod 600`):
+Preparation pulls the pinned digest, builds without network access, and exports a container that is never started. It preserves ownership, extended attributes and runtime configuration. Static monitoring binaries are checked for an ELF interpreter before acceptance. The generated OBS recipe is rebuilt locally and its runtime configuration compared before upload.
 
-```json
-{"username": "thefutureisprivate", "password": "YOUR_OBS_PASSWORD"}
-```
+Only allowlisted inputs enter the context. Generated archives stay under ignored `.build/obs/`; they never enter Git. The publisher checks input/archive hashes, stages source blobs, commits one complete OBS revision per package, and verifies uploaded bytes with SHA-256. It refuses unexpected remote files and detected concurrent edits. Use a single publisher; do not edit these OBS packages concurrently in the web UI.
 
-Two lines containing the username and password, optionally preceded by a label, are also accepted. Credentials go only to `https://api.opensuse.org`; redirects are refused. No private signing key is downloaded or stored here.
+The image contains `/usr/share/obs-container/provenance.json` with upstream digest, input hashes, runtime metadata and rootfs archive hash. Changes to applications, bundled libraries or certificates require a reviewed upstream digest and a rebuild. These images retain upstream release cadence and dependencies; scratch alone does not remediate vulnerable code inside a binary.
 
-`bootstrap` creates the project, configures its `containers/x86_64` repository, ensures a project signing key exists, and saves its **public** key and fingerprint in `keys/`. Rerunning it preserves the existing key and refuses conflicting project configuration.
-
-`publish` uploads only the files explicitly listed in [obs/packages.json](obs/packages.json). It stages the files with SHA-256 checksums, commits one complete OBS source revision per image, and reads the committed bytes back to check their SHA-256 hashes. It refuses to delete unexpected remote sources. Use one publisher at a time; do not edit the same OBS package concurrently in the web UI.
-
-OBS schedules builds after source changes and tracks the builder's repository dependencies. Publishing a new Git commit alone does not trigger OBS: run `make publish` after editing. A Git hosting remote and webhook are not configured by this repository.
-
-## Verify and run
-
-Wait for `make status` to report a successful, published build, then run:
+## Verify and deploy
 
 ```sh
-make verify
-
-# Optionally keep the verified image, manifest, and signatures:
-python3 scripts/obs.py verify hello --tag 0.1.0 \
-  --destination .build/verified-hello
+python3 scripts/obs.py verify prometheus --tag 3.15.0 \
+  --destination .build/verified-prometheus
 ```
 
-Verification uses the pinned public key, an isolated Skopeo signature policy with a default of `reject`, and OBS's HTTPS signature store. It performs a real image copy: `skopeo inspect` by itself does not verify trust. A missing signature, wrong key, or mismatched image identity causes failure. The command prints the verified manifest digest. It currently selects `linux/amd64`, matching the configured OBS architecture.
+Verification performs a Skopeo copy using a default-reject policy, the pinned public key in `keys/`, a matching image identity, and the HTTPS OBS signature store. Missing or incorrect signatures fail. OBS uses **OpenPGP simple signing**, not Cosign keyless signing. [OBS signing documentation](https://openbuildservice.org/help/manuals/obs-user-guide/cha-obs-build-containers.html)
 
-The published image name is:
-
-```text
-registry.opensuse.org/home/thefutureisprivate/containers/containers/hello:latest
-```
-
-To run exactly the already verified bytes with Podman:
+Run the already verified bytes, for example:
 
 ```sh
-skopeo copy --remove-signatures dir:.build/verified-hello \
-  docker-archive:.build/hello.tar:localhost/obs-hello:verified
-podman load -i .build/hello.tar
+skopeo copy --remove-signatures dir:.build/verified-prometheus \
+  docker-archive:.build/prometheus.tar:localhost/obs-prometheus:verified
+podman load -i .build/prometheus.tar
 podman run --rm --pull=never --read-only --cap-drop=ALL \
-  --security-opt=no-new-privileges --network=none \
-  --pids-limit=32 --memory=32m --cpus=1 localhost/obs-hello:verified
+  --security-opt=no-new-privileges --tmpfs /prometheus:rw,mode=1777 \
+  -p 127.0.0.1:9090:9090 localhost/obs-prometheus:verified
 ```
 
-The temporary verification policy is not a system-wide Podman policy. A subsequent plain `podman pull` or `docker pull` does not automatically enforce it. Deploy verified content by digest and configure trust enforcement in the deployment runtime. Reusing a mutable tag after verification can retrieve different content.
+This example uses ephemeral data; use persistent storage and reviewed configuration for deployment. Docker archives cannot retain detached signatures; convert only after successful verification. Plain `podman pull` does not inherit this temporary trust policy. Deploy verified content by digest or load the verified archive, and configure trust enforcement in the deployment runtime.
 
-The Docker archive conversion drops detached signatures because that transport cannot store them; do it only after the preceding verification succeeds. The verified directory retains the signatures.
+Runtime configuration remains application-specific:
 
-OBS uses OpenPGP **simple signing**, not Cosign/keyless Sigstore signatures. The OBS path called `sigstore` is its signature storage location. See the [OBS signing documentation](https://openbuildservice.org/help/manuals/obs-user-guide/cha-obs-build-containers.html).
+- **Kanidm:** provide TLS, server configuration and `/data` writable by `65532:65532`. Upstream requires an x86-64-v2 capable CPU. [Deployment guide](https://kanidm.github.io/kanidm/stable/preparing_for_your_deployment.html)
+- **RADIUS:** supply Kanidm connection credentials, RADIUS clients, certificates and writable directories required by its upstream entrypoint. UDP 1812/1813 are exposed. The integration daemon and FreeRADIUS are tested; no live identity service is deployed here.
+- **Stalwart:** persist `/etc/stalwart` and `/var/lib/stalwart`. Preserve `NET_BIND_SERVICE` for its file capability and low ports; removing its bounding capability can prevent execution. Configure domain, TLS and mail separately. [Docker guide](https://stalw.art/docs/install/platform/docker/)
+- **Monitoring:** persist Prometheus/Alertmanager data as UID/GID 65532. Blackbox ICMP probes need suitable capabilities/kernel settings. Node exporter needs explicit host mounts/namespaces for host metrics. PostgreSQL exporter needs a database connection secret at deployment.
+- **PostgreSQL:** use a password secret and persistent storage at `/var/lib/postgresql` for PostgreSQL 18. Its entrypoint initializes ownership as root, then runs the server as `postgres`. A new image does not migrate existing databases across major versions. [Official image documentation](https://github.com/docker-library/docs/tree/master/postgres)
 
-The pinned public key is bootstrapped through authenticated HTTPS to OBS. Review its fingerprint through your OBS account or another trusted channel before distributing it as a production trust root. Key rotation is explicit: verification never fetches a replacement key automatically.
+Smoke tests check binary execution, monitoring startup/configuration, and PostgreSQL initialization plus a SQL query. They do not replace deployment integration tests for identity, RADIUS, mail delivery, host metrics or database upgrades.
 
-If a newly created OBS key has a future creation timestamp, allow the clocks to catch up before publishing. If an image was signed before that timestamp, rebuild it afterward; waiting alone cannot repair an old signature. Never work around this by weakening the signature policy.
+Key rotation is explicit: verification never automatically trusts a replacement key. Review the pinned fingerprint through OBS or another trusted channel. If OBS creates a key with a future timestamp, wait for clock skew and rebuild any image signed too early; do not weaken verification.
 
-## Add an image
-
-1. Add `containers/NAME/Dockerfile` and its source files. OBS package sources are flat; use a source archive for a nested application tree.
-2. Set `#!BuildTag: NAME:VERSION-<RELEASE> NAME:VERSION NAME:latest`, a matching `#!BuildName`, and `#!BuildVersion` in the Dockerfile. OBS replaces `<RELEASE>` with its build release counter. Keep the published image name equal to the package name for the provided verification command.
-3. Add an entry to `obs/packages.json` listing every source file to upload.
-4. Run `make check`, then `make publish`.
-
-The example compiles with `CGO_ENABLED=0` and disables Go module/toolchain downloads. OBS workers build without external network access. Vendor additional Go modules and make them available through the source package; do not introduce build-time `curl`, `git clone`, or live module downloads.
-
-Rebuild and redeploy whenever the application, Go toolchain, or bundled assets need a security update. OBS signatures establish origin and integrity; they do not certify that an image has no vulnerabilities. Repository paths use current openSUSE Tumbleweed content, so rebuilding at a later time can use newer packages. OBS records the build inputs; this setup does not promise identical output across time.
-
-Relevant upstream references: [Dockerfile support in OBS](https://openbuildservice.org/help/manuals/obs-user-guide/cha-obs-supported-formats.html), [OBS build configuration](https://openbuildservice.org/help/manuals/obs-user-guide/cha-obs-prjconfig.html), and [containers/image trust policy](https://github.com/containers/image/blob/main/docs/containers-policy.json.5.md).
-
-See [the initial end-to-end validation](docs/validation.md) for the tested source revision, image digest, and runtime checks.
+See [the validation record](docs/validation.md) and [OBS Dockerfile rules](https://openbuildservice.org/help/manuals/obs-user-guide/cha-obs-supported-formats.html).

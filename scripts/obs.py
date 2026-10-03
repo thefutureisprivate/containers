@@ -71,7 +71,7 @@ class Client:
             headers["Authorization"] = self.authorization
         req = urllib.request.Request(url, data=data, headers=headers, method=method)
         try:
-            with self.opener.open(req, timeout=45) as response:
+            with self.opener.open(req, timeout=300) as response:
                 return response.read()
         except urllib.error.HTTPError as exc:
             if missing_ok and exc.code == 404:
@@ -89,17 +89,26 @@ def source_path(package=None, filename=None):
     return "/" + "/".join(urllib.parse.quote(p, safe=":") for p in parts)
 
 
-def packages():
+def package_manifest():
     manifest = json.loads((ROOT / "obs/packages.json").read_text())
     if not isinstance(manifest, dict) or not manifest:
         raise ValueError("obs/packages.json must list at least one package")
+    return manifest
+
+
+def packages(selected=None):
+    manifest = package_manifest()
     result = {}
-    for package, filenames in manifest.items():
+    for package, entry in manifest.items():
+        if selected is not None and package not in selected:
+            continue
         if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", package):
             raise ValueError("Invalid package name")
+        prepared = isinstance(entry, dict)
+        filenames = entry.get("prepared") if prepared else entry
         if not isinstance(filenames, list) or "Dockerfile" not in filenames or len(filenames) != len(set(filenames)):
             raise ValueError(f"{package}: list unique source files, including Dockerfile")
-        directory = ROOT / "containers" / package
+        directory = ROOT / (".build/obs" if prepared else "containers") / package
         if directory.is_symlink():
             raise ValueError(f"{package}: symlinked source directories are not supported")
         sources = {}
@@ -108,8 +117,25 @@ def packages():
                 raise ValueError(f"{package}: source names must be simple filenames")
             path = directory / name
             if path.is_symlink() or not path.is_file():
-                raise ValueError(f"{package}/{name}: expected a regular source file")
+                raise ValueError(f"{package}/{name}: expected a regular source file; run scripts/prepare.py {package} first for prepared images")
             sources[name] = path.read_bytes()
+        if prepared:
+            original = (ROOT / "containers" / package / "Dockerfile").read_bytes()
+            provenance = json.loads(sources["provenance.json"])
+            inputs = {}
+            for filename in ("Dockerfile", "LICENSE", "NOTICE"):
+                path = ROOT / "containers" / package / filename
+                if path.is_symlink():
+                    raise ValueError("Symlinked build inputs are not supported")
+                if path.is_file():
+                    inputs[filename] = hashlib.sha256(path.read_bytes()).hexdigest()
+            if provenance.get("inputs_sha256") != inputs:
+                raise ValueError(f"{package}: build inputs changed; prepare again")
+            for field, data in (("recipe_sha256", original), ("rootfs_sha256", sources["rootfs.tar.gz"]), ("dockerfile_sha256", sources["Dockerfile"])):
+                if provenance.get(field) != hashlib.sha256(data).hexdigest():
+                    raise ValueError(f"{package}: stale or corrupted prepared sources ({field}); prepare again")
+            if sources["upstream.Dockerfile"] != original:
+                raise ValueError(f"{package}: prepared recipe differs from Git")
         result[package] = sources
     return result
 
@@ -180,9 +206,9 @@ def bootstrap(client):
     pin_key(client)
 
 
-def publish(client):
+def publish(client, prepared_sources=None):
     # Validate the entire allowlist before making any remote changes.
-    for package, sources in packages().items():
+    for package, sources in (packages() if prepared_sources is None else prepared_sources).items():
         path = source_path(package)
         meta = client.request("GET", path + "/_meta", missing_ok=True)
         if meta is None:
@@ -235,7 +261,7 @@ def check_source_bytes(client, package, revision, sources):
 
 
 def image_reference(package, tag="latest"):
-    if package not in packages() or not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}", tag):
+    if package not in package_manifest() or not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}", tag):
         raise ValueError("Unknown package or invalid image tag")
     namespace = project().lower().replace(":", "/")
     return f"{REGISTRY}/{namespace}/{REPOSITORY}/{package}:{tag}"
@@ -294,17 +320,21 @@ def verify(package, tag, destination=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
-    for command in ("check", "bootstrap", "publish", "status"):
+    for command in ("check", "bootstrap", "status"):
         sub.add_parser(command)
+    publication = sub.add_parser("publish")
+    publication.add_argument("packages", nargs="*", choices=list(package_manifest()) + ["all"])
     log = sub.add_parser("log")
-    log.add_argument("package", choices=list(packages()))
+    log.add_argument("package", choices=list(package_manifest()))
     verification = sub.add_parser("verify")
-    verification.add_argument("package", choices=list(packages()))
+    verification.add_argument("package", choices=list(package_manifest()))
     verification.add_argument("--tag", default="latest")
     verification.add_argument("--destination", help="Keep the verified image in a new directory")
     args = parser.parse_args()
     if args.command == "check":
-        for package in packages():
+        for package, entry in package_manifest().items():
+            if isinstance(entry, list):
+                packages([package])
             print(f"Validated source allowlist: {package}")
         ET.parse(ROOT / "obs/project.xml")
     elif args.command == "verify":
@@ -315,7 +345,9 @@ def main():
             bootstrap(client)
         elif args.command == "publish":
             trusted_key()
-            publish(client)
+            names = list(package_manifest()) if not args.packages or "all" in args.packages else args.packages
+            for name in names:
+                publish(client, packages([name]))
         elif args.command == "status":
             print(client.request("GET", f"/build/{project()}/_result").decode())
         elif args.command == "log":

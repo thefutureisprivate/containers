@@ -1,0 +1,86 @@
+{
+  "kanidm": {
+    "runtime": "scratch",
+    "binaries": [],
+    "smoke": [
+      "/sbin/kanidmd",
+      "version"
+    ]
+  },
+  "kanidm-radius": {
+    "runtime": "upstream",
+    "binaries": [],
+    "smoke": [
+      "/usr/sbin/radiusd",
+      "-v"
+    ]
+  },
+  "stalwart": {
+    "runtime": "upstream",
+    "binaries": [],
+    "smoke": [
+      "/usr/local/bin/stalwart",
+      "--version"
+    ]
+  },
+  "prometheus": {
+    "runtime": "scratch",
+    "binaries": [
+      "/bin/prometheus",
+      "/bin/promtool"
+    ],
+    "smoke": [
+      "/bin/prometheus",
+      "--version"
+    ]
+  },
+  "blackbox-exporter": {
+    "runtime": "scratch",
+    "binaries": [
+      "/bin/blackbox_exporter"
+    ],
+    "smoke": [
+      "/bin/blackbox_exporter",
+      "--version"
+    ]
+  },
+  "postgres-exporter": {
+    "runtime": "scratch",
+    "binaries": [
+      "/bin/postgres_exporter"
+    ],
+    "smoke": [
+      "/bin/postgres_exporter",
+      "--version"
+    ]
+  },
+  "node-exporter": {
+    "runtime": "scratch",
+    "binaries": [
+      "/bin/node_exporter"
+    ],
+    "smoke": [
+      "/bin/node_exporter",
+      "--version"
+    ]
+  },
+  "alertmanager": {
+    "runtime": "scratch",
+    "binaries": [
+      "/bin/alertmanager",
+      "/bin/amtool"
+    ],
+    "smoke": [
+      "/bin/alertmanager",
+      "--version"
+    ]
+  },
+  "postgresql": {
+    "runtime": "upstream",
+    "binaries": [],
+    "smoke": [
+      "postgres",
+      "--version"
+    ]
+  }
+}

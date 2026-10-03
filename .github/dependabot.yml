@@ -1,0 +1,31 @@
+version: 2
+updates:
+  - package-ecosystem: docker
+    directories:
+      - /containers/kanidm
+      - /containers/kanidm-radius
+      - /containers/stalwart
+      - /containers/prometheus
+      - /containers/blackbox-exporter
+      - /containers/postgres-exporter
+      - /containers/node-exporter
+      - /containers/alertmanager
+      - /containers/postgresql
+    schedule:
+      interval: daily
+      time: "06:00"
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 15
+    groups:
+      kanidm:
+        patterns:
+          - "kanidm/*"
+          - "docker.io/kanidm/*"
+    commit-message:
+      prefix: "Update container"
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "Update CI"

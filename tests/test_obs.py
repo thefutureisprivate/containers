@@ -35,6 +35,34 @@ class RepositoryTests(unittest.TestCase):
             with patch.object(obs, "ROOT", root), self.assertRaises(ValueError):
                 obs.packages()
 
+    def test_prepared_sources_must_match_current_inputs_and_archive(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "containers/demo"
+            prepared = root / ".build/obs/demo"
+            source.mkdir(parents=True)
+            prepared.mkdir(parents=True)
+            (root / "obs").mkdir()
+            original = b"FROM example:1.0.0@sha256:" + b"a" * 64 + b"\n"
+            generated, archive = b"FROM scratch\nADD rootfs.tar.gz /\n", b"archive data"
+            sha = lambda data: hashlib.sha256(data).hexdigest()
+            (source / "Dockerfile").write_bytes(original)
+            (prepared / "upstream.Dockerfile").write_bytes(original)
+            (prepared / "Dockerfile").write_bytes(generated)
+            (prepared / "rootfs.tar.gz").write_bytes(archive)
+            (prepared / "provenance.json").write_text(json.dumps({"inputs_sha256": {"Dockerfile": sha(original)}, "recipe_sha256": sha(original), "rootfs_sha256": sha(archive), "dockerfile_sha256": sha(generated)}))
+            (root / "obs/packages.json").write_text(json.dumps({"demo": {"prepared": ["Dockerfile", "upstream.Dockerfile", "rootfs.tar.gz", "provenance.json"]}}))
+            with patch.object(obs, "ROOT", root):
+                self.assertIn("demo", obs.packages())
+                (prepared / "rootfs.tar.gz").write_bytes(b"tampered")
+                with self.assertRaisesRegex(ValueError, "corrupted prepared sources"):
+                    obs.packages()
+                (prepared / "rootfs.tar.gz").write_bytes(archive)
+                (source / "Dockerfile").write_bytes(original + b"USER 1000\n")
+                with self.assertRaisesRegex(ValueError, "build inputs changed"):
+                    obs.packages()
+
     def test_no_write_without_credentials(self):
         client = obs.Client()
         client.opener = Mock()
