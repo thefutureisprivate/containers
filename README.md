@@ -2,7 +2,7 @@
 
 Recipes for [home:thefutureisprivate:containers](https://build.opensuse.org/project/show/home:thefutureisprivate:containers), maintained in [thefutureisprivate/containers](https://github.com/thefutureisprivate/containers). **OBS builds, tests, signs and publishes the images.** GitHub stores recipes and Dependabot PRs; there are no GitHub Actions jobs.
 
-The runtime policy is **scratch for static Go services, Alpine for everything else**. The expanded catalog is undergoing validation in the unpublished `home:thefutureisprivate:containers:staging` project; [validation records](docs/validation.md) distinguish published releases from work in progress.
+The runtime policy is **scratch for static Go services, Alpine for everything else**. All 20 recipes have passed builds and smoke checks in the unpublished `home:thefutureisprivate:containers:staging` project. Production publication and signature verification are in progress; see the [validation records](docs/validation.md).
 
 ## Images
 
@@ -79,6 +79,8 @@ After a merge, package-scoped [GitHub push hooks](docs/webhook.md) ask OBS to fe
 6. Signs successful images with the OBS project key and publishes them to `registry.opensuse.org`.
 
 `Containerfile` is the complete, digest-pinned runtime recipe. `Dockerfile` is a declaration for OBS's scheduler, which cannot directly import digest-qualified `FROM` references. The build-time policy validates the tag/digest pair and renders the actual recipe inside OBS. Source builds declare Alpine `main` and `community` dependencies separately from the RPMs used by the OBS build VM. Rust dependencies come from the upstream `Cargo.lock` through OBS's source-asset fetcher; compilation cannot access the network.
+
+Dependabot tracks base-image and application releases. Native Alpine packages come from OBS's `Alpine:Latest` repositories; updates to those packages can trigger OBS rebuilds independently of a Dependabot PR. OBS records their exact build inputs in each build's `_buildenv` and dependency metadata.
 
 `/usr/share/obs-container/provenance.json` records the Git revision, input and policy hashes, source assets, upstream image/configuration and allocator build. Small dependency RPMs make policy/allocator changes trigger container rebuilds. GitHub allows only 20 push hooks per event, so the 20 applications have hooks; after changing either shared tooling package, run `make refresh` explicitly.
 

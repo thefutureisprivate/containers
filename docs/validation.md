@@ -1,6 +1,6 @@
 # Application image validation
 
-## Expanded Alpine catalog — in progress
+## Expanded Alpine catalog — production migration in progress
 
 The `add-services-hardened-malloc` branch is being validated in the unpublished
 `home:thefutureisprivate:containers:staging` project. It contains 20 application
@@ -9,9 +9,15 @@ services remain scratch; all other final runtimes are required to identify as
 Alpine and contain its musl loader. The retired Python Matter Server has been
 replaced by `matterjs-server` 1.4.0.
 
-23 local policy tests pass. Final source builds, runtime checks, production
-publication and signature verification for this expanded catalog are still
-pending; the historical nine-image results below do not validate the new catalog.
+All 20 staging builds and their OBS smoke checks passed on 2026-10-05, including
+the Alpine source builds of Kanidm, RADIUS, MAS, OpenThread and Matter.js, and
+Synapse's musl wheels/native extension. The shared allocator and policy RPMs also
+built successfully. A separate preflight compared successful build source IDs,
+recipe hashes and per-package Git revisions with the checkout. All 23 local
+policy tests pass.
+
+Production publication and signature verification are still pending; the
+historical nine-image results below do not validate the new published catalog.
 
 ## Native OBS pipeline and bundled Web UI — 2026-10-05
 
