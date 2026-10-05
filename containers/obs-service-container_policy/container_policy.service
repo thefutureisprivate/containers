@@ -1,0 +1,5 @@
+<service name="container_policy">
+  <summary>Verify imported image pins and render the container recipe</summary>
+  <description>Runs offline inside the OBS build VM, before the container build.</description>
+  <parameter name="name"><description>Catalog image name</description></parameter>
+</service>

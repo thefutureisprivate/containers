@@ -1,4 +1,6 @@
-# Immutable upstream input; Dependabot updates the tag and digest in PRs.
-FROM docker.io/library/postgres:18.6-alpine3.24@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
-# The official entrypoint supports initialization directly as postgres.
-USER 70:70
+#!BuildTag: postgresql:latest
+#!BuildName: postgresql
+# Dependency declaration for the OBS scheduler; not the runtime recipe.
+# The build-time service verifies the pin and renders Containerfile.
+# Dependabot updates this tag and Containerfile's tag/digest together.
+FROM registry-1.docker.io/library/postgres:18.6-alpine3.24

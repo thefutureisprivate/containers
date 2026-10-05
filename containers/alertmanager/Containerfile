@@ -1,0 +1,18 @@
+# Immutable upstream input; Dependabot updates the tag and digest in PRs.
+FROM registry-1.docker.io/prom/alertmanager:v0.34.1@sha256:e9733bafb1bdef9b00e25a21f8f99dc26a22224bf16641ad754d1649f4c3357a AS upstream
+#!DisableOBSContainerSupport
+FROM scratch
+COPY LICENSE /LICENSE
+COPY NOTICE /NOTICE
+COPY --from=upstream /bin/alertmanager /bin/alertmanager
+COPY --from=upstream /bin/amtool /bin/amtool
+COPY --from=upstream /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=upstream /etc/alertmanager/alertmanager.yml /etc/alertmanager/alertmanager.yml
+COPY --from=upstream --chown=65532:65532 /alertmanager /alertmanager
+WORKDIR /alertmanager
+VOLUME ["/alertmanager"]
+USER 65532:65532
+EXPOSE 9093
+EXPOSE 9094/tcp 9094/udp
+ENTRYPOINT ["/bin/alertmanager"]
+CMD ["--config.file=/etc/alertmanager/alertmanager.yml", "--storage.path=/alertmanager"]

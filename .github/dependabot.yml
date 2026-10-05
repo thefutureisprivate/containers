@@ -21,5 +21,6 @@ updates:
         patterns:
           - "kanidm/*"
           - "docker.io/kanidm/*"
+          - "registry-1.docker.io/kanidm/*"
     commit-message:
       prefix: "Update container"

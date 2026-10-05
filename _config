@@ -1,0 +1,8 @@
+%if "%_package" == "obs-service-container_policy"
+Type: spec
+%else
+Type: docker
+BuildEngine: podman
+%endif
+Repotype: none
+Patterntype: none
