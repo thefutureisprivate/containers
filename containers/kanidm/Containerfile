@@ -740,7 +740,7 @@
 #!RemoteAsset: https://static.crates.io/crates/zune-jpeg/zune-jpeg-0.5.15.crate sha256:27bc9d5b815bc103f142aa054f561d9187d191692ec7c2d1e2b4737f8dbd7296 crate-zune-jpeg-0.5.15.crate
 #!RemoteAsset: https://static.crates.io/crates/zxcvbn/zxcvbn-3.1.1.crate sha256:f9eaee90f4a795d1eb4ba6c51e1c1721d4784d550e8efa7b2600f29c867365e0 crate-zxcvbn-3.1.1.crate
 #!RemoteAsset: https://github.com/kanidm/kanidm/archive/refs/tags/v1.11.2.tar.gz sha256:a8ed31203e5f8c036b9cb261c85ddac19291bc6ca16981495495cd9621c56529 upstream.tar.gz
-FROM registry-1.docker.io/library/alpine:3.24.0@sha256:a2d49ea686c2adfe3c992e47dc3b5e7fa6e6b5055609400dc2acaeb241c829f4 AS builder
+FROM registry-1.docker.io/library/alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 AS builder
 # apk 3 uses a plain absolute path for an offline file repository.
 RUN sed -i 's|^file:||' /etc/apkrepos_obs_dockersupport
 RUN apk add cargo clang22 clang22-libclang musl-dev build-base cmake pkgconf openssl-dev
@@ -752,7 +752,7 @@ RUN tar -xzf /tmp/upstream.tar.gz -C /src --strip-components=1 && tar -xzf /tmp/
 ENV RUSTFLAGS="-C target-feature=-crt-static" CARGO_NET_OFFLINE=true CARGO_BUILD_JOBS=2 RUST_MIN_STACK=67108864
 ENV KANIDM_BUILD_PROFILE=container_generic
 RUN cargo build --offline --locked --release -p daemon && strip target/release/kanidmd
-FROM registry-1.docker.io/library/alpine:3.24.0@sha256:a2d49ea686c2adfe3c992e47dc3b5e7fa6e6b5055609400dc2acaeb241c829f4
+FROM registry-1.docker.io/library/alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
 # apk 3 uses a plain absolute path for an offline file repository.
 RUN sed -i 's|^file:||' /etc/apkrepos_obs_dockersupport
 RUN apk add ca-certificates libgcc libstdc++
