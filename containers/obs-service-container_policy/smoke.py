@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Smoke-test the image built by OBS before it can be published."""
 import argparse
 import json

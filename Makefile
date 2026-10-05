@@ -1,24 +1,17 @@
 PYTHON ?= python3
 IMAGE ?= prometheus
 
-.PHONY: check prepare smoke bootstrap publish status log verify
+.PHONY: check configure refresh status log verify
 
 check:
 	$(PYTHON) -m unittest discover -s tests -v
 	$(PYTHON) scripts/obs.py check
-	$(PYTHON) scripts/prepare.py --check all
 
-prepare:
-	$(PYTHON) scripts/prepare.py all
+configure:
+	$(PYTHON) scripts/obs.py configure
 
-smoke:
-	$(PYTHON) scripts/smoke.py all
-
-bootstrap:
-	$(PYTHON) scripts/obs.py bootstrap
-
-publish:
-	$(PYTHON) scripts/obs.py publish all
+refresh:
+	$(PYTHON) scripts/obs.py refresh
 
 status:
 	$(PYTHON) scripts/obs.py status

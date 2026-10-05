@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build/publish through OBS; verify its GPG simple-signing signatures locally."""
+"""Configure OBS Git builds and verify its OpenPGP container signatures."""
 
 import argparse
 import base64
@@ -90,64 +90,21 @@ def source_path(package=None, filename=None):
 
 
 def package_manifest():
-    manifest = json.loads((ROOT / "obs/packages.json").read_text())
-    if not isinstance(manifest, dict) or not manifest:
-        raise ValueError("obs/packages.json must list at least one package")
-    return manifest
+    return json.loads((ROOT / "containers/obs-service-container_policy/images.json").read_text())
 
 
-def packages(selected=None):
-    manifest = package_manifest()
-    result = {}
-    for package, entry in manifest.items():
-        if selected is not None and package not in selected:
-            continue
-        if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", package):
-            raise ValueError("Invalid package name")
-        prepared = isinstance(entry, dict)
-        filenames = entry.get("prepared") if prepared else entry
-        if not isinstance(filenames, list) or "Dockerfile" not in filenames or len(filenames) != len(set(filenames)):
-            raise ValueError(f"{package}: list unique source files, including Dockerfile")
-        directory = ROOT / (".build/obs" if prepared else "containers") / package
-        if directory.is_symlink():
-            raise ValueError(f"{package}: symlinked source directories are not supported")
-        sources = {}
-        for name in filenames:
-            if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", name):
-                raise ValueError(f"{package}: source names must be simple filenames")
-            path = directory / name
-            if path.is_symlink() or not path.is_file():
-                raise ValueError(f"{package}/{name}: expected a regular source file; run scripts/prepare.py {package} first for prepared images")
-            sources[name] = path.read_bytes()
-        if prepared:
-            original = (ROOT / "containers" / package / "Dockerfile").read_bytes()
-            provenance = json.loads(sources["provenance.json"])
-            inputs = {}
-            for filename in ("Dockerfile", "LICENSE", "NOTICE"):
-                path = ROOT / "containers" / package / filename
-                if path.is_symlink():
-                    raise ValueError("Symlinked build inputs are not supported")
-                if path.is_file():
-                    inputs[filename] = hashlib.sha256(path.read_bytes()).hexdigest()
-            if provenance.get("inputs_sha256") != inputs:
-                raise ValueError(f"{package}: build inputs changed; prepare again")
-            for field, data in (("recipe_sha256", original), ("rootfs_sha256", sources["rootfs.tar.gz"]), ("dockerfile_sha256", sources["Dockerfile"])):
-                if provenance.get(field) != hashlib.sha256(data).hexdigest():
-                    raise ValueError(f"{package}: stale or corrupted prepared sources ({field}); prepare again")
-            if sources["upstream.Dockerfile"] != original:
-                raise ValueError(f"{package}: prepared recipe differs from Git")
-        result[package] = sources
-    return result
-
-
-def filelist(sources):
-    root = ET.Element("directory")
-    for name, data in sorted(sources.items()):
-        # MD5 is OBS's source transport identifier, not the trust mechanism.
-        ET.SubElement(root, "entry", name=name,
-                      md5=hashlib.md5(data, usedforsecurity=False).hexdigest(),
-                      hash="sha256:" + hashlib.sha256(data).hexdigest())
-    return ET.tostring(root)
+def check():
+    sys.path.insert(0, str(ROOT / "containers/obs-service-container_policy"))
+    from policy import check_recipe
+    for name in package_manifest():
+        check_recipe(ROOT / "containers" / name, name)
+        service = ET.parse(ROOT / "containers" / name / "_service").getroot()
+        if service.find("service[@name='container_policy'][@mode='buildtime']") is None:
+            raise ValueError(f"{name}: missing OBS build-time policy service")
+        print(f"Validated OBS recipe: {name}")
+    ET.parse(ROOT / "obs/project.xml")
+    if list((ROOT / ".github/workflows").glob("*")):
+        raise ValueError("GitHub workflows are outside this OBS-only build architecture")
 
 
 def fingerprint(key_bytes):
@@ -178,86 +135,20 @@ def pin_key(client):
     print(f"Pinned OBS project public key: {actual}")
 
 
-def bootstrap(client):
+def configure(client):
+    """Apply the declared project topology; sources and build config come from Git."""
+    check()
     desired = (ROOT / "obs/project.xml").read_bytes()
-    current = client.request("GET", source_path(filename="_meta"), missing_ok=True)
-    if current is None:
-        client.request("PUT", source_path(filename="_meta"), desired)
-        print(f"Created {project()}")
-    else:
-        def normalized(data):
-            root = ET.fromstring(data)
-            for element in root.iter():
-                element.text = (element.text or "").strip() or None
-                element.tail = None
-            return ET.tostring(root)
-        if normalized(current) != normalized(desired):
-            raise ValueError("Existing OBS project metadata differs; reconcile obs/project.xml with OBS before bootstrapping.")
-        print(f"Project already configured: {project()}")
-    config = (ROOT / "obs/project.conf").read_bytes()
-    current = client.request("GET", source_path(filename="_config"), missing_ok=True)
-    if current and current.strip() != config.strip():
-        raise ValueError("Existing OBS project configuration differs; refusing to overwrite it.")
-    if not current:
-        client.request("PUT", source_path(filename="_config"), config)
-    # Only create a key when this project has none; never rotate an existing key.
+    client.request("PUT", source_path(filename="_meta"), desired)
     if client.request("GET", source_path(filename="_pubkey"), missing_ok=True) is None:
         client.request("POST", source_path(), b"", {"cmd": "createkey"})
     pin_key(client)
+    print(f"Configured OBS Git builds: {project()}")
 
 
-def publish(client, prepared_sources=None):
-    # Validate the entire allowlist before making any remote changes.
-    for package, sources in (packages() if prepared_sources is None else prepared_sources).items():
-        path = source_path(package)
-        meta = client.request("GET", path + "/_meta", missing_ok=True)
-        if meta is None:
-            root = ET.Element("package", name=package, project=project())
-            ET.SubElement(root, "title").text = f"{package} container"
-            ET.SubElement(root, "description").text = "Built from the containers repository; signed and published by OBS."
-            client.request("PUT", path + "/_meta", ET.tostring(root))
-        elif ET.fromstring(meta).find("scmsync") is not None:
-            raise ValueError(f"{package} is managed by SCM sync; refusing to overwrite its sources")
-        current = ET.fromstring(client.request("GET", path))
-        remote_files = {entry.attrib["name"]: entry.attrib["md5"] for entry in current.findall("entry")}
-        wanted = filelist(sources)
-        wanted_files = {entry.attrib["name"]: entry.attrib["md5"] for entry in ET.fromstring(wanted)}
-        extra = remote_files.keys() - sources.keys()
-        if extra:
-            raise ValueError(f"{package}: unexpected remote files {sorted(extra)}; inspect them before removing anything")
-        if remote_files == wanted_files:
-            check_source_bytes(client, package, current, sources)
-            print(f"{package}: sources already current")
-            continue
-        # Stage blobs first. One commitfilelist publishes the complete revision.
-        for name, data in sorted(sources.items()):
-            if remote_files.get(name) != wanted_files[name]:
-                client.request("PUT", source_path(package, name), data, {"rev": "repository"})
-        latest = ET.fromstring(client.request("GET", path))
-        if latest.attrib.get("srcmd5") != current.attrib.get("srcmd5"):
-            raise ValueError(f"{package}: OBS sources changed during upload; retry after reviewing the change")
-        response = ET.fromstring(client.request("POST", path, wanted, {
-            "cmd": "commitfilelist", "comment": "Publish reviewed container sources from the local repository",
-        }))
-        if response.tag != "directory" or response.get("error"):
-            raise RuntimeError(f"{package}: OBS did not accept the complete source revision")
-        # Read back the committed file hashes rather than assuming upload succeeded.
-        committed = ET.fromstring(client.request("GET", path))
-        actual = {entry.attrib["name"]: entry.attrib["md5"] for entry in committed.findall("entry")}
-        if actual != wanted_files:
-            raise RuntimeError(f"{package}: committed OBS sources differ from local sources")
-        check_source_bytes(client, package, committed, sources)
-        print(f"{package}: committed OBS revision {committed.get('rev')}")
-
-
-def check_source_bytes(client, package, revision, sources):
-    rev = revision.get("srcmd5") or revision.get("rev")
-    if not rev:
-        raise RuntimeError(f"{package}: OBS did not identify the committed source revision")
-    for name, expected in sorted(sources.items()):
-        actual = client.request("GET", source_path(package, name), query={"rev": rev})
-        if hashlib.sha256(actual).digest() != hashlib.sha256(expected).digest():
-            raise RuntimeError(f"{package}/{name}: SHA-256 readback mismatch")
+def refresh(client):
+    client.request("POST", source_path("_project"), b"", {"cmd": "runservice"})
+    print("Requested OBS to fetch the current main branch")
 
 
 def image_reference(package, tag="latest"):
@@ -320,10 +211,8 @@ def verify(package, tag, destination=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
-    for command in ("check", "bootstrap", "status"):
+    for command in ("check", "configure", "refresh", "status"):
         sub.add_parser(command)
-    publication = sub.add_parser("publish")
-    publication.add_argument("packages", nargs="*", choices=list(package_manifest()) + ["all"])
     log = sub.add_parser("log")
     log.add_argument("package", choices=list(package_manifest()))
     verification = sub.add_parser("verify")
@@ -332,22 +221,15 @@ def main():
     verification.add_argument("--destination", help="Keep the verified image in a new directory")
     args = parser.parse_args()
     if args.command == "check":
-        for package, entry in package_manifest().items():
-            if isinstance(entry, list):
-                packages([package])
-            print(f"Validated source allowlist: {package}")
-        ET.parse(ROOT / "obs/project.xml")
+        check()
     elif args.command == "verify":
         verify(args.package, args.tag, args.destination)
     else:
         client = Client(os.environ.get("OBS_CREDENTIALS_FILE"))
-        if args.command == "bootstrap":
-            bootstrap(client)
-        elif args.command == "publish":
-            trusted_key()
-            names = list(package_manifest()) if not args.packages or "all" in args.packages else args.packages
-            for name in names:
-                publish(client, packages([name]))
+        if args.command == "configure":
+            configure(client)
+        elif args.command == "refresh":
+            refresh(client)
         elif args.command == "status":
             print(client.request("GET", f"/build/{project()}/_result").decode())
         elif args.command == "log":

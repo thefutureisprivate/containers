@@ -43,3 +43,5 @@ install -m 0755 %{SOURCE5} %{buildroot}/usr/lib/build/post-build-checks/
 /usr/lib/build/post-build-checks/90-container-policy
 
 %changelog
+* Mon Oct 05 2026 Containers maintainers <noreply@github.com> - 1.0
+- Verify native OBS registry inputs and unprivileged container runtimes.

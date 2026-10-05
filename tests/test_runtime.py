@@ -8,9 +8,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-SPEC = importlib.util.spec_from_file_location("prepare", Path(__file__).resolve().parents[1] / "scripts/prepare.py")
-prepare = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(prepare)
+from test_policy import policy as prepare
 
 
 class PreparationTests(unittest.TestCase):
@@ -68,57 +66,6 @@ class PreparationTests(unittest.TestCase):
             else:
                 prepare.static_elf(io.BytesIO(binary))
 
-    def test_runtime_configuration_survives_offline_conversion(self):
-        config = {"User": "65532:65532", "WorkingDir": "/data", "StopSignal": "SIGINT",
-                  "Entrypoint": ["/app"], "Cmd": ["--serve"], "Volumes": {"/data": {}},
-                  "ExposedPorts": {"1812/udp": {}}, "Env": ["EXAMPLE=literal$value"],
-                  "Healthcheck": {"Test": ["CMD", "/app", "healthcheck"], "Interval": 1000000000}}
-        text = prepare.render("example", "1.2.3", config)
-        for instruction in ('USER 65532:65532', 'WORKDIR /data', 'STOPSIGNAL SIGINT',
-                            'ENTRYPOINT ["/app"]', 'CMD ["--serve"]', 'VOLUME ["/data"]',
-                            'EXPOSE 1812/udp', 'ENV EXAMPLE="literal\\$value"',
-                            'HEALTHCHECK --interval=1000000000ns CMD ["/app", "healthcheck"]'):
-            self.assertIn(instruction, text)
-
-    def test_dual_protocol_ports_share_an_expose_instruction(self):
-        text = prepare.render("alertmanager", "1.0.0", {"ExposedPorts": {"9094/tcp": {}, "9094/udp": {}}})
-        self.assertIn("EXPOSE 9094/tcp 9094/udp\n", text)
-        self.assertEqual(text.count("EXPOSE "), 1)
-
-    def test_unreviewed_onbuild_and_instruction_injection_rejected(self):
-        for config in ({"OnBuild": ["RUN unreviewed"]}, {"User": "user\nRUN bad"}, {"ExposedPorts": {"80\nRUN bad": {}}}):
-            with self.assertRaises(ValueError):
-                prepare.render("example", "1.0.0", config)
-
-    def test_upstream_requires_stable_tag_and_digest(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            directory = root / "containers/example"
-            directory.mkdir(parents=True)
-            for value in ("FROM example:latest", "FROM example:1.0.0", "FROM example:19beta4@sha256:" + "a" * 64):
-                (directory / "Dockerfile").write_text(value + "\n")
-                with patch.object(prepare, "ROOT", root), self.assertRaises(ValueError):
-                    prepare.recipe("example")
-            for tag in ("v0.16.24-alpine", "18.6-alpine3.24"):
-                (directory / "Dockerfile").write_text(f"FROM example:{tag}@sha256:" + "a" * 64 + "\n")
-                with patch.object(prepare, "ROOT", root):
-                    self.assertEqual(prepare.recipe("example")[2], tag.removeprefix("v"))
-
-    def test_requested_catalog_is_complete_and_pinned(self):
-        expected = {"kanidm", "kanidm-radius", "stalwart", "prometheus", "blackbox-exporter", "postgres-exporter", "node-exporter", "alertmanager", "postgresql"}
-        self.assertEqual(set(prepare.images()), expected)
-        for name in expected:
-            prepare.recipe(name)
-
-    def test_alpine_images_cannot_silently_change_variant(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            for name in ("stalwart", "postgresql"):
-                directory = root / "containers" / name
-                directory.mkdir(parents=True)
-                (directory / "Dockerfile").write_text("FROM example:1.0.0@sha256:" + "a" * 64 + "\n")
-                with patch.object(prepare, "ROOT", root), self.assertRaisesRegex(ValueError, "Alpine variant"):
-                    prepare.recipe(name)
 
 
 if __name__ == "__main__":

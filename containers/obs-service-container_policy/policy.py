@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """OBS input and runtime policy. Executed inside the isolated OBS build VM."""
 import argparse
 import gzip

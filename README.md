@@ -24,58 +24,55 @@ registry.opensuse.org/home/thefutureisprivate/containers/containers/
 | `alertmanager` | 0.34.1 | Scratch, static binaries and CA bundle; UID/GID 65532 |
 | `postgresql` | 18.6-alpine3.24 | Official PostgreSQL Alpine runtime; initialization and server use UID/GID 70 |
 
-The table records the latest validation; **the Dockerfiles are the current version source of truth**. OBS publishes `NAME:VERSION-<RELEASE>`, `NAME:VERSION`, and `NAME:latest`. A pinned upstream digest is an integrity pin, not a verified upstream publisher signature. OBS signs the result under this project's identity.
+The table records the latest validation; **the Containerfiles are the current version source of truth**. OBS publishes `NAME:VERSION-<RELEASE>`, `NAME:VERSION`, and `NAME:latest`. A pinned upstream digest is an integrity pin, not a verified upstream publisher signature. OBS signs the result under this project's identity.
 
 See [Alpine versus scratch](docs/base-images.md) for the security tradeoffs.
 
-Every image declares a numeric, nonzero runtime UID and GID. Preparation rejects root/implicit users, setuid/setgid files, file capabilities and image labels requesting capabilities. RADIUS privilege helpers are stripped, and Stalwart's `NET_BIND_SERVICE` file capability is removed. These checks also apply to Dependabot PR builds. Build-time `USER 0:0` instructions only modify image files; the final runtime user is unprivileged.
+Every image declares a numeric, nonzero runtime UID and GID. OBS rejects root/implicit users, setuid/setgid files, file capabilities and image labels requesting capabilities. RADIUS privilege helpers are stripped, and Stalwart's `NET_BIND_SERVICE` file capability is removed. Merged Dependabot changes must pass the same OBS build checks before publication. Build-time `USER 0:0` instructions only modify image files; the final runtime user is unprivileged.
 
-## Dependabot and publication
+## Dependabot and OBS builds
 
-[Dependabot](.github/dependabot.yml) checks all nine upstream image tags/digests daily and pinned GitHub Actions weekly. Updates arrive as PRs; they are not automatically merged. Kanidm and RADIUS updates are grouped when available together. PostgreSQL major releases require a reviewed PR and a database migration plan.
+[Dependabot](.github/dependabot.yml) checks upstream image tags and digests daily and proposes PRs. Updates require review and merging; they are not automatically merged. Kanidm and RADIUS updates are grouped when available together. PostgreSQL major releases require a database migration plan.
 
-The [workflow](.github/workflows/containers.yml) runs unit checks, builds each generated offline recipe, and smoke tests the result on PRs. PR jobs have read-only GitHub permissions and no OBS credential. On `main`, after all checks pass, one serialized publisher prepares the contexts, submits complete OBS source revisions, waits for publication, verifies signatures, and checks embedded provenance against its inputs. An older workflow checks for a newer `main` commit before publishing.
+GitHub stores the recipes and update PRs. **There are no GitHub Actions build, test, signing or publishing jobs, and GitHub needs no OBS account password.** An OBS SCM webhook notifies OBS after Git changes. OBS fetches the `main` branch itself through its [SCM bridge](https://openbuildservice.org/help/manuals/obs-user-guide/cha-obs-scm-bridge.html).
 
-**One-time setup:** add the repository Actions secret **`OBS_CREDENTIALS`** in [Settings → Secrets and variables → Actions](https://github.com/thefutureisprivate/containers/settings/secrets/actions). Its value is an OBS credential file, for example:
+OBS performs the complete image pipeline:
 
-```json
-{"username":"thefutureisprivate","password":"YOUR_OBS_PASSWORD"}
-```
+1. Read `_manifest` and `_config` from Git and import the nine versioned upstream images using OBS's `Docker:Registry` service.
+2. Build the policy helper RPM in the `tooling` repository. Each container depends on this helper.
+3. Inside the isolated OBS build VM, check the imported registry digest, image configuration hash and every layer against the pin. A mismatch fails the build.
+4. Build the complete Containerfile with Podman, applying file hardening and the numeric non-root user. The build uses the imported image with `--pull=never`.
+5. Audit the effective filesystem for setuid/setgid files and file capabilities, validate static monitoring executables, and run the application smoke tests. A failed check prevents publication.
+6. Sign successful images with the existing OBS project key and publish them to `registry.opensuse.org`.
 
-The existing `/tmp/obs-creds` format (username/password on separate lines, with an optional leading label) also works. The secret is exposed only to the publication step on `main`, written to a temporary file with mode 600, and removed afterward. Never commit it. Anyone able to change and run a trusted `main` workflow can use its Actions secrets; restrict repository write access and protect `main` as appropriate.
+Each package has two small recipe inputs because OBS's registry importer currently cannot resolve `FROM image:tag@sha256:digest` directly:
 
-The publication job reports a missing secret explicitly. After adding it, rerun the failed job or use **Run workflow** on `main`.
+- **`Containerfile`** is the full runtime recipe with the immutable upstream digest.
+- **`Dockerfile`** declares the same version tag for OBS's dependency scheduler. Dependabot recognizes and updates both filenames. The OBS service rejects mismatched tags, checks the imported content against the Containerfile digest, then renders the actual build recipe inside OBS.
 
-## Local build and publish
+The `#!DisableOBSContainerSupport` marker prevents OBS from injecting RPM package-manager helpers into Alpine and upstream runtimes. The custom service and post-build hook live in [`containers/obs-service-container_policy`](containers/obs-service-container_policy). Its RPM is an internal build dependency; only application images are published.
 
-Requirements: Python 3.11+, Make, Podman, GnuPG, Skopeo, working container user namespaces, and storage for the image runtimes. No Python packages are required. `PODMAN_COMMAND='sudo podman'` can select a rootful installation.
+The image contains `/usr/share/obs-container/provenance.json` with its Git commit, canonical input hashes, upstream digest, upstream configuration hash and runtime UID/GID. These are assembly builds using pinned upstream binaries; the application binaries themselves are not recompiled from source here.
+
+## Project administration
+
+Local requirements: Python 3.11+, Make, GnuPG and Skopeo. Podman is also needed for the optional signed-filesystem verification. These commands configure or inspect OBS; they do not build or upload image files:
 
 ```sh
 make check
-make prepare
-make smoke
-
 export OBS_CREDENTIALS_FILE=/path/outside/repository/obs-credentials.json
-make bootstrap
-make publish
+make configure
+make refresh
+make status
+make log IMAGE=prometheus
 python3 scripts/verify_all.py --timeout 1800
 ```
 
-For one image:
+`make configure` applies [`obs/project.xml`](obs/project.xml), preserving the pinned signing identity. OBS obtains its build configuration from the root [`_config`](_config), not a GitHub job. `make refresh` asks OBS to fetch Git now; normal updates use the webhook. The credential file stays outside Git and may contain JSON `username`/`password` fields or separate username/password lines, with an optional leading label.
 
-```sh
-python3 scripts/prepare.py prometheus
-python3 scripts/smoke.py prometheus
-python3 scripts/obs.py publish prometheus
-make status
-make log IMAGE=prometheus
-```
+See [webhook setup](docs/webhook.md) for the connection that triggers builds after a merge. The old `OBS_CREDENTIALS` Actions secret is obsolete and can be removed. Until the webhook is installed, `make refresh` is required after a merge. Dependabot opens PRs independently of that webhook.
 
-Preparation pulls the pinned digest, builds without network access, and exports a container that is never started. It preserves ownership, allowed extended attributes and runtime configuration, and rejects privilege-granting files. Static monitoring binaries are checked for an ELF interpreter before acceptance. The generated OBS recipe is rebuilt locally and its runtime configuration compared before upload. Signed-image verification also checks the expected unprivileged UID/GID and scans the published layers for setuid/setgid files and file capabilities.
-
-Only allowlisted inputs enter the context. Generated archives stay under ignored `.build/obs/`; they never enter Git. The publisher checks input/archive hashes, stages source blobs, commits one complete OBS revision per package, and verifies uploaded bytes with SHA-256. It refuses unexpected remote files and detected concurrent edits. Use a single publisher; do not edit these OBS packages concurrently in the web UI.
-
-The image contains `/usr/share/obs-container/provenance.json` with upstream digest, input hashes, runtime metadata and rootfs archive hash. Changes to applications, bundled libraries or certificates require a reviewed upstream digest and a rebuild. These images retain upstream release cadence and dependencies; scratch alone does not remediate vulnerable code inside a binary.
+The signing verifier rejects unsigned images, wrong identities and unreviewed key changes. `verify_all.py` additionally checks that published provenance matches the checkout, its expected runtime UID/GID, and the merged runtime filesystem. Checking the effective filesystem matters for layered images: files removed by hardening may still exist in lower layers but cannot be executed from the resulting container filesystem.
 
 ## Verify and deploy
 

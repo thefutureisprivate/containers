@@ -1,5 +1,7 @@
 # Application image validation
 
+The records below describe the previous preparation/upload pipeline. The native OBS migration is being validated in the unpublished `home:thefutureisprivate:containers:staging` project. They are retained as historical evidence, not proof of the replacement pipeline.
+
 ## Unprivileged runtimes — 2026-10-05
 
 Stalwart now uses the official `v0.16.24-alpine` image, pinned by digest. All nine images have explicit nonzero numeric users/groups: `65532:65532` for Kanidm and the five monitoring images, `497:496` for RADIUS, `2000:2000` for Stalwart and `70:70` for PostgreSQL. The prepared filesystems contain no setuid/setgid files or file capabilities.
@@ -38,4 +40,4 @@ The full registry prefix is `registry.opensuse.org/home/thefutureisprivate/conta
 
 Local checks passed: immutable input validation, static ELF checks for the five monitoring runtimes, binary execution for all nine images, monitoring service startup, Prometheus/Alertmanager configuration validation, and PostgreSQL initialization plus `SELECT 42`. Kanidm RADIUS tests cover both FreeRADIUS and the native `kanidm_radiusd` wrapper. Identity authentication, RADIUS clients, real email delivery and database migration tests need deployment configuration and are outside this initial image validation.
 
-GitHub's Docker and GitHub Actions Dependabot scans both completed successfully after the first push. The current inputs were already up to date, so that scan did not open an update PR. Future upstream tag/digest changes are checked daily. Automated OBS publication requires the `OBS_CREDENTIALS` repository Actions secret; initial publication here used the supplied local credential file.
+GitHub's Docker and GitHub Actions Dependabot scans both completed successfully after the first push. The current inputs were already up to date, so that scan did not open an update PR. Future upstream tag/digest changes are checked daily. That earlier publication workflow used an `OBS_CREDENTIALS` Actions secret. It has been removed; native OBS Git synchronization replaces it.

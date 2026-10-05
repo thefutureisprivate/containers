@@ -33,8 +33,8 @@ Alpine supplies musl, BusyBox and a package manager, and builds its userland wit
 
 - The monitoring images copy upstream executables into scratch and validate that they have no ELF interpreter. Required certificates, configuration and licenses are included.
 - Every image declares a reviewed numeric, nonzero UID and GID. Monitoring images and Kanidm use `65532:65532`, RADIUS uses `497:496`, Stalwart uses `2000:2000`, and PostgreSQL uses `70:70`, including database initialization.
-- Preparation rejects setuid/setgid files and file capabilities. RADIUS loses its privilege-granting helpers; Stalwart loses its low-port file capability. Smoke tests run with all capabilities dropped and `no-new-privileges`. Configure unprivileged internal listeners and storage ownership at deployment.
-- A source allowlist keeps local files and credentials out of uploads. OBS signs the resulting image with its managed project key.
+- OBS rejects setuid/setgid files and file capabilities. RADIUS loses its privilege-granting helpers; Stalwart loses its low-port file capability. Smoke tests run with all capabilities dropped and `no-new-privileges`. Configure unprivileged internal listeners and storage ownership at deployment.
+- OBS fetches committed recipes directly from Git; credentials and locally prepared archives are not uploaded as build sources. OBS signs the resulting image with its managed project key.
 - The verification command requires the pinned key and a matching image identity, rejecting unsigned content.
 
 For an HTTPS client, add and maintain a CA trust bundle. For timezone names, user lookups, dynamic libraries, subprocesses, or temporary files, supply and test the required assets explicitly. If that produces an ad hoc distribution, a maintained Alpine runtime may be easier to secure over its lifetime.
@@ -43,6 +43,6 @@ Host isolation remains necessary: use a non-root runtime, a read-only filesystem
 
 ## OBS implications
 
-OBS workers are offline. The preparation script downloads the exact upstream image digest before submission, exports the chosen runtime, and generates a scratch-plus-rootfs recipe. For PostgreSQL, RADIUS and Stalwart this rootfs still contains the entire upstream distribution; writing `FROM scratch` in the generated recipe does not make those runtimes minimal or remove their package dependencies.
+OBS imports upstream images through its registry service before starting the isolated build. Its build-time policy checks each imported image against the Containerfile digest, then OBS builds the full runtime recipe, runs the runtime audits and smoke tests, signs and publishes it. GitHub holds the recipes and Dependabot PRs; it builds no images.
 
-The signed provenance records the upstream digest and local input/archive hashes. Dependabot updates real Dockerfile image references through PRs, and CI rebuilds and tests the runtime before publication. OBS assembles and signs the final application images from those pinned upstream binaries. [OBS Dockerfile build rules](https://openbuildservice.org/help/manuals/obs-user-guide/cha-obs-supported-formats.html)
+The signed provenance records the Git revision, upstream digest and input hashes. A reviewed upstream update supplies application, library and certificate updates; scratch does not itself update embedded dependencies. [OBS container build documentation](https://openbuildservice.org/help/manuals/obs-user-guide/cha-obs-build-containers.html)
