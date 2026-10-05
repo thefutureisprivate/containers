@@ -1,5 +1,6 @@
-%if "%_package" == "obs-service-container_policy"
+%if "%_repository" == "tooling"
 Type: spec
+BuildEngine:
 %else
 Type: docker
 BuildEngine: podman
