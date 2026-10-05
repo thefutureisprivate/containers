@@ -55,6 +55,10 @@ Each package has two small recipe inputs because OBS's registry importer current
 
 The `#!DisableOBSContainerSupport` marker prevents OBS from injecting RPM package-manager helpers into Alpine and upstream runtimes. The custom service and post-build hook live in [`containers/obs-service-container_policy`](containers/obs-service-container_policy). Its RPM is an internal build dependency; only application images are published.
 
+A small `obs-container-policy-revision` RPM records hashes of the shared build
+checks. OBS tracks it as a rebuild dependency, so changing those checks rebuilds
+every container; ordinary build-support RPMs alone would not trigger that rebuild.
+
 The image contains `/usr/share/obs-container/provenance.json` with its recipe Git commit, canonical input hashes, build-policy hashes, upstream digest, upstream configuration hash and runtime UID/GID. These are assembly builds using pinned upstream binaries; the application binaries themselves are not recompiled from source here.
 
 ## Project administration

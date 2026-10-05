@@ -4,6 +4,8 @@ BuildEngine:
 %else
 Type: docker
 BuildEngine: podman
+# Include the policy RPM in rebuild metadata, not only build-environment support.
+Substitute: build-packages:docker obs-container-policy-revision
 %endif
 Repotype: none
 Patterntype: none
