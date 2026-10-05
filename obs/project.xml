@@ -1,29 +1,22 @@
 <project name="home:thefutureisprivate:containers">
   <title>Signed application containers</title>
   <description>OBS fetches Git recipes and pinned upstream runtimes, builds and tests the images, then signs and publishes them. GitHub hosts recipes and Dependabot update PRs.</description>
-  <person userid="thefutureisprivate" role="maintainer"/>
+  <person userid="thefutureisprivate" role="maintainer" />
   <build>
-    <enable/>
-    <disable repository="ghcr"/>
+    <enable />
   </build>
   <publish>
-    <enable repository="containers"/>
-    <disable repository="tooling"/>
-    <disable repository="ghcr"/>
+    <enable repository="containers" />
+    <disable repository="tooling" />
   </publish>
   <repository name="containers">
-    <path project="home:thefutureisprivate:containers" repository="tooling"/>
-    <path project="Docker:Registry" repository="standard"/>
-    <path project="home:thefutureisprivate:containers" repository="ghcr"/>
-    <path project="openSUSE:Containers:Tumbleweed" repository="containers"/>
+    <path project="home:thefutureisprivate:containers" repository="tooling" />
+    <path project="Docker:Registry" repository="standard" />
+    <path project="openSUSE:Containers:Tumbleweed" repository="containers" />
     <arch>x86_64</arch>
   </repository>
   <repository name="tooling">
-    <path project="openSUSE:Factory" repository="snapshot"/>
-    <arch>x86_64</arch>
-  </repository>
-  <repository name="ghcr">
-    <download arch="x86_64" url="https://ghcr.io" repotype="registry"/>
+    <path project="openSUSE:Factory" repository="snapshot" />
     <arch>x86_64</arch>
   </repository>
 </project>

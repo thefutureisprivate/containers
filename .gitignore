@@ -9,3 +9,4 @@ obs-creds
 .osc/
 *.key
 *.pem
+**/.config/go/
