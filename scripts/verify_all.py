@@ -10,7 +10,7 @@ import time
 import xml.etree.ElementTree as ET
 
 import obs
-from prepare import RUNTIME_FIELDS, comparable, images, recipe
+from prepare import RUNTIME_FIELDS, audit_file_privileges, audit_runtime, comparable, images, recipe
 
 
 def embedded_provenance(directory):
@@ -20,6 +20,7 @@ def embedded_provenance(directory):
         path = directory / layer["digest"].split(":", 1)[1]
         with tarfile.open(path) as archive:
             for member in archive:
+                audit_file_privileges(member, "signed image")
                 if member.name.removeprefix("./") == "usr/share/obs-container/provenance.json" and member.isfile():
                     result = archive.extractfile(member).read()
     return result
@@ -57,6 +58,7 @@ def verify_all(timeout):
                         manifest = json.loads((directory / "manifest.json").read_text())
                         digest = manifest["config"]["digest"].split(":", 1)[1]
                         config = json.loads((directory / digest).read_text())["config"]
+                        audit_runtime(name, config, images()[name])
                         original = json.loads(expected)["runtime_config"]
                         for field in RUNTIME_FIELDS:
                             if comparable(field, config.get(field)) != comparable(field, original.get(field)):

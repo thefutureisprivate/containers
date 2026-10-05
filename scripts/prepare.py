@@ -46,8 +46,10 @@ def recipe(name):
         if line.startswith("FROM ") and line != "FROM scratch" and not PIN.fullmatch(line):
             raise ValueError(f"{name}: unpinned FROM")
     registry, tag, digest = match.groups()
-    if not re.fullmatch(r"v?\d+\.\d+(?:\.\d+)?(?:-alpine\d+\.\d+)?", tag):
+    if not re.fullmatch(r"v?\d+\.\d+(?:\.\d+)?(?:-alpine(?:\d+\.\d+)?)?", tag):
         raise ValueError(f"{name}: use a stable, explicit release tag")
+    if name in ("stalwart", "postgresql") and "-alpine" not in tag:
+        raise ValueError(f"{name}: keep the reviewed Alpine variant")
     return content, f"{registry}:{tag}@sha256:{digest}", tag.removeprefix("v")
 
 
@@ -79,6 +81,14 @@ def comparable(field, value):
     return value or None
 
 
+def audit_runtime(name, config, spec):
+    user = config.get("User") or ""
+    if not re.fullmatch(r"[1-9]\d*:[1-9]\d*", user) or user != spec["user"]:
+        raise ValueError(f"{name}: runtime must use the reviewed non-root UID:GID {spec['user']}")
+    if (config.get("Labels") or {}).get("io.containers.capabilities"):
+        raise ValueError(f"{name}: image must not request additional capabilities")
+
+
 def static_elf(stream):
     """Reject dynamically linked binaries without executing an untrusted ldd."""
     header = stream.read(64)
@@ -94,9 +104,19 @@ def static_elf(stream):
             raise ValueError("Scratch executable requires a dynamic loader")
 
 
+def audit_file_privileges(member, name):
+    if (member.isfile() or member.islnk()) and member.mode & 0o6000:
+        raise ValueError(f"{name}: setuid/setgid file: {member.name}")
+    if any("security.capability" in key for key in member.pax_headers):
+        raise ValueError(f"{name}: file capability: {member.name}")
+
+
 def audit_rootfs(path, name, spec):
     with tarfile.open(path) as archive:
-        members = {m.name.removeprefix("./").rstrip("/"): m for m in archive}
+        members = {}
+        for member in archive:
+            audit_file_privileges(member, name)
+            members[member.name.removeprefix("./").rstrip("/")] = member
         for binary in spec["binaries"]:
             member = members.get(binary.lstrip("/"))
             if not member or not member.isfile():
@@ -108,10 +128,6 @@ def audit_rootfs(path, name, spec):
             cert = members.get("etc/ssl/certs/ca-certificates.crt")
             if not cert or not cert.isfile() or not cert.size:
                 raise ValueError("Missing TLS CA bundle")
-        if name == "stalwart":
-            binary = members["usr/local/bin/stalwart"]
-            if "SCHILY.xattr.security.capability" not in binary.pax_headers:
-                raise ValueError("Stalwart's file capabilities were lost during export")
 
 
 def render(name, version, config):
@@ -194,6 +210,7 @@ def prepare(name):
         if info["Architecture"] != "amd64" or info["Os"] != "linux":
             raise ValueError("Only linux/amd64 is configured in OBS")
         config = runtime_config(info)
+        audit_runtime(name, config, spec)
         container = podman("create", "--pull=never", "--network=none", "--image-volume=ignore",
                            "--entrypoint=/not-executed", tag, capture=True).strip()
         try:

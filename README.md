@@ -12,21 +12,23 @@ All images currently target **linux/amd64**. Append the package name and tag to:
 registry.opensuse.org/home/thefutureisprivate/containers/containers/
 ```
 
-| Package | Initial version | Runtime |
+| Package | Version at validation | Runtime |
 | --- | --- | --- |
 | `kanidm` | 1.11.2 | Upstream scratch, required glibc libraries; UID/GID 65532 |
-| `kanidm-radius` | 1.11.2 | Upstream openSUSE/FreeRADIUS/native Kanidm module; `radiusd` user |
-| `stalwart` | 0.16.24 | Upstream Debian runtime; `stalwart` user |
+| `kanidm-radius` | 1.11.2 | Upstream openSUSE/FreeRADIUS/native Kanidm module; UID 497 / GID 496 |
+| `stalwart` | 0.16.24-alpine | Official Stalwart Alpine runtime; UID/GID 2000 |
 | `prometheus` | 3.15.0 | Scratch, static binaries and CA bundle; UID/GID 65532 |
 | `blackbox-exporter` | 0.28.0 | Scratch, static binary and CA bundle; UID/GID 65532 |
 | `postgres-exporter` | 0.20.1 | Scratch, static binary and CA bundle; UID/GID 65532 |
 | `node-exporter` | 1.12.1 | Scratch, static binary and CA bundle; UID/GID 65532 |
 | `alertmanager` | 0.34.1 | Scratch, static binaries and CA bundle; UID/GID 65532 |
-| `postgresql` | 18.6-alpine3.24 | Official PostgreSQL Alpine runtime and initialization entrypoint |
+| `postgresql` | 18.6-alpine3.24 | Official PostgreSQL Alpine runtime; initialization and server use UID/GID 70 |
 
-The table records the initial setup; **the Dockerfiles are the current version source of truth**. OBS publishes `NAME:VERSION-<RELEASE>`, `NAME:VERSION`, and `NAME:latest`. A pinned upstream digest is an integrity pin, not a verified upstream publisher signature. OBS signs the result under this project's identity.
+The table records the latest validation; **the Dockerfiles are the current version source of truth**. OBS publishes `NAME:VERSION-<RELEASE>`, `NAME:VERSION`, and `NAME:latest`. A pinned upstream digest is an integrity pin, not a verified upstream publisher signature. OBS signs the result under this project's identity.
 
 See [Alpine versus scratch](docs/base-images.md) for the security tradeoffs.
+
+Every image declares a numeric, nonzero runtime UID and GID. Preparation rejects root/implicit users, setuid/setgid files, file capabilities and image labels requesting capabilities. RADIUS privilege helpers are stripped, and Stalwart's `NET_BIND_SERVICE` file capability is removed. These checks also apply to Dependabot PR builds. Build-time `USER 0:0` instructions only modify image files; the final runtime user is unprivileged.
 
 ## Dependabot and publication
 
@@ -69,7 +71,7 @@ make status
 make log IMAGE=prometheus
 ```
 
-Preparation pulls the pinned digest, builds without network access, and exports a container that is never started. It preserves ownership, extended attributes and runtime configuration. Static monitoring binaries are checked for an ELF interpreter before acceptance. The generated OBS recipe is rebuilt locally and its runtime configuration compared before upload.
+Preparation pulls the pinned digest, builds without network access, and exports a container that is never started. It preserves ownership, allowed extended attributes and runtime configuration, and rejects privilege-granting files. Static monitoring binaries are checked for an ELF interpreter before acceptance. The generated OBS recipe is rebuilt locally and its runtime configuration compared before upload. Signed-image verification also checks the expected unprivileged UID/GID and scans the published layers for setuid/setgid files and file capabilities.
 
 Only allowlisted inputs enter the context. Generated archives stay under ignored `.build/obs/`; they never enter Git. The publisher checks input/archive hashes, stages source blobs, commits one complete OBS revision per package, and verifies uploaded bytes with SHA-256. It refuses unexpected remote files and detected concurrent edits. Use a single publisher; do not edit these OBS packages concurrently in the web UI.
 
@@ -100,12 +102,12 @@ This example uses ephemeral data; use persistent storage and reviewed configurat
 Runtime configuration remains application-specific:
 
 - **Kanidm:** provide TLS, server configuration and `/data` writable by `65532:65532`. Upstream requires an x86-64-v2 capable CPU. [Deployment guide](https://kanidm.github.io/kanidm/stable/preparing_for_your_deployment.html)
-- **RADIUS:** supply Kanidm connection credentials, RADIUS clients, certificates and writable directories required by its upstream entrypoint. UDP 1812/1813 are exposed. The integration daemon and FreeRADIUS are tested; no live identity service is deployed here.
-- **Stalwart:** persist `/etc/stalwart` and `/var/lib/stalwart`. Preserve `NET_BIND_SERVICE` for its file capability and low ports; removing its bounding capability can prevent execution. Configure domain, TLS and mail separately. [Docker guide](https://stalw.art/docs/install/platform/docker/)
+- **RADIUS:** supply Kanidm connection credentials, RADIUS clients, certificates and directories writable by `497:496` as required by its upstream entrypoint. UDP 1812/1813 are exposed. The integration daemon and FreeRADIUS are tested; no live identity service is deployed here.
+- **Stalwart:** persist `/etc/stalwart` and `/var/lib/stalwart`, both owned by `2000:2000`. Bootstrap uses port 8080. Configure mail/TLS listeners on internal ports above 1023 and map public ports to them (for example, host 25 to configured internal 2525). Alternatively, a deployment runtime can allow unprivileged low ports with the container network namespace's `net.ipv4.ip_unprivileged_port_start` setting. This image needs no `NET_BIND_SERVICE` capability. Configure domain, TLS and mail separately. [Docker guide](https://stalw.art/docs/install/platform/docker/)
 - **Monitoring:** persist Prometheus/Alertmanager data as UID/GID 65532. Blackbox ICMP probes need suitable capabilities/kernel settings. Node exporter needs explicit host mounts/namespaces for host metrics. PostgreSQL exporter needs a database connection secret at deployment.
-- **PostgreSQL:** use a password secret and persistent storage at `/var/lib/postgresql` for PostgreSQL 18. Its entrypoint initializes ownership as root, then runs the server as `postgres`. A new image does not migrate existing databases across major versions. [Official image documentation](https://github.com/docker-library/docs/tree/master/postgres)
+- **PostgreSQL:** use a password secret and persistent storage at `/var/lib/postgresql` for PostgreSQL 18. Initialization and the server both run as `70:70`; the entrypoint cannot repair root-owned bind mounts. Provision existing/bind-mounted data with that ownership before starting. New named volumes inherit the image's ownership. With a read-only root filesystem, provide writable `/var/run/postgresql` and `/tmp` too. A new image does not migrate existing databases across major versions. [Official image documentation](https://github.com/docker-library/docs/tree/master/postgres)
 
-Smoke tests check binary execution, monitoring startup/configuration, and PostgreSQL initialization plus a SQL query. They do not replace deployment integration tests for identity, RADIUS, mail delivery, host metrics or database upgrades.
+Run with `--cap-drop=ALL --security-opt=no-new-privileges` and the required writable volumes; the smoke tests use these restrictions for every image without a user override. They check binary execution, monitoring startup/configuration, Stalwart bootstrap readiness, and PostgreSQL initialization plus a SQL query over TCP. Running service processes are checked for root identities and capabilities. These tests do not replace deployment integration tests for identity, RADIUS, mail delivery, host metrics or database upgrades. An image's default user cannot prevent a deployment administrator from overriding it or granting privileges.
 
 Key rotation is explicit: verification never automatically trusts a replacement key. Review the pinned fingerprint through OBS or another trusted channel. If OBS creates a key with a future timestamp, wait for clock skew and rebuild any image signed too early; do not weaken verification.
 

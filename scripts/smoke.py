@@ -3,19 +3,44 @@
 import argparse
 import json
 import secrets
+import subprocess
 import time
 
-from prepare import images, podman
+from prepare import audit_runtime, images, podman, runtime_config
+
+
+def audit_processes(container):
+    # Podman reads these from /proc, including for images without ps or a shell.
+    output = podman("top", container, "user", "capbnd", "capeff", "capprm", capture=True)
+    rows = [line.split() for line in output.splitlines()[1:] if line.strip()]
+    if not rows:
+        raise ValueError("No running processes to audit")
+    for row in rows:
+        if len(row) != 4 or row[0] in ("root", "0") or any(cap != "none" for cap in row[1:]):
+            raise ValueError("Container process has root identity or capabilities: " + " ".join(row))
+
+
+def wait_for_command(container, *command):
+    for _ in range(60):
+        try:
+            return podman("exec", container, *command, capture=True, merge_stderr=True)
+        except subprocess.CalledProcessError:
+            state = json.loads(podman("inspect", "--format={{json .State}}", container, capture=True))
+            if not state.get("Running"):
+                break
+            time.sleep(1)
+    # Bootstrap logs may contain generated credentials. Do not print them.
+    raise ValueError("Container initialization/readiness failed")
 
 
 def smoke(name):
     spec = images()[name]
     image = f"localhost/obs-prepared/{name}:test"
+    info = json.loads(podman("image", "inspect", image, capture=True))[0]
+    audit_runtime(name, runtime_config(info), spec)
     common = ["--pull=never", "--network=none", "--read-only", "--cap-drop=ALL",
               "--security-opt=no-new-privileges", "--pids-limit=128", "--memory=512m",
               "--tmpfs=/tmp:rw,nosuid,nodev,size=64m"]
-    if name == "stalwart":
-        common += ["--cap-add=NET_BIND_SERVICE"]
     executable, *args = spec["smoke"]
     output = podman("run", "--rm", *common, "--entrypoint", executable, image, *args, capture=True, merge_stderr=True)
     if not output.strip():
@@ -24,22 +49,29 @@ def smoke(name):
     if name == "kanidm-radius":
         podman("run", "--rm", *common, "--entrypoint=/usr/local/bin/kanidm_radiusd", image, "--help")
     if name == "postgresql":
-        # Official PostgreSQL initializes as root and then drops privileges.
-        flags = ["--pull=never", "--network=none", "--read-only", "--memory=512m",
-                 "--tmpfs=/var/lib/postgresql:rw,size=192m", "--tmpfs=/var/run/postgresql:rw,size=8m",
-                 "--tmpfs=/tmp:rw,size=16m", "--env", "POSTGRES_PASSWORD=" + secrets.token_hex(24)]
+        # The anonymous data volume inherits the image's postgres ownership.
+        # Entry-point initialization and every exec use the image's default USER.
+        flags = common + ["--tmpfs=/run/postgresql:rw,mode=1777,size=8m",
+                          "--env", "POSTGRES_PASSWORD=" + secrets.token_hex(24)]
         container = podman("run", "--detach", *flags, image, capture=True).strip()
         try:
-            for _ in range(60):
-                try:
-                    result = podman("exec", "--user=postgres", container, "psql", "-U", "postgres", "-Atc", "SELECT 42", capture=True)
-                    if result.strip() == "42":
-                        break
-                except Exception:
-                    pass
-                time.sleep(1)
-            else:
-                raise ValueError("PostgreSQL initialization/query failed")
+            # The temporary initialization server has no TCP listener. This
+            # query waits for the final server, not the transient initdb phase.
+            result = wait_for_command(container, "sh", "-c",
+                                      'PGPASSWORD="$POSTGRES_PASSWORD" exec psql -h 127.0.0.1 -U postgres -Atc "SELECT 42"')
+            if result.strip() != "42":
+                raise ValueError("PostgreSQL query failed")
+            audit_processes(container)
+        finally:
+            podman("rm", "--force", "--volumes", container)
+    elif name == "stalwart":
+        # Fresh anonymous volumes test bootstrap permissions at both declared
+        # paths. The initial management listener uses unprivileged port 8080.
+        container = podman("run", "--detach", *common, image, capture=True).strip()
+        try:
+            wait_for_command(container, "curl", "--fail", "--silent", "--output", "/dev/null",
+                             "http://127.0.0.1:8080/healthz/live")
+            audit_processes(container)
         finally:
             podman("rm", "--force", "--volumes", container)
     elif name in ("prometheus", "alertmanager", "blackbox-exporter", "postgres-exporter", "node-exporter"):
@@ -56,6 +88,7 @@ def smoke(name):
             state = json.loads(podman("inspect", "--format={{json .State}}", container, capture=True))
             if not state.get("Running"):
                 raise ValueError(f"{name} failed to start: " + podman("logs", container, capture=True))
+            audit_processes(container)
             if name == "prometheus":
                 podman("exec", container, "/bin/promtool", "check", "config", "/etc/prometheus/prometheus.yml")
             elif name == "alertmanager":

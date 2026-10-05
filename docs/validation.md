@@ -1,4 +1,14 @@
-# Application image validation — 2026-10-03
+# Application image validation
+
+## Unprivileged runtimes — 2026-10-05
+
+Stalwart now uses the official `v0.16.24-alpine` image, pinned by digest. All nine images have explicit nonzero numeric users/groups: `65532:65532` for Kanidm and the five monitoring images, `497:496` for RADIUS, `2000:2000` for Stalwart and `70:70` for PostgreSQL. The prepared filesystems contain no setuid/setgid files or file capabilities.
+
+All 24 unit tests and all nine local smoke tests passed. Every smoke test used the image's default user, a read-only root filesystem, `--cap-drop=ALL` and `--security-opt=no-new-privileges`. Stalwart initialized fresh configuration/data volumes and its HTTP readiness endpoint responded on port 8080. PostgreSQL initialized a fresh data volume as UID 70 and answered `SELECT 42` over TCP after initialization. Monitoring services started and their configuration checks passed. Running service processes had non-root identities and empty bounding, effective and permitted capability sets. Kanidm and RADIUS binary checks do not include live identity/RADIUS integration.
+
+Stalwart deployment must use unprivileged internal listener ports, or a container network namespace configured to permit low ports without capabilities. PostgreSQL bind-mounted data must already be owned by `70:70`; its entrypoint no longer starts as root to change ownership.
+
+## Initial publication — 2026-10-03
 
 All nine application source packages were committed to OBS as revision 1 and built successfully. The following release tags passed Skopeo signature verification with the pinned project key, and their embedded provenance matched the locally prepared inputs.
 

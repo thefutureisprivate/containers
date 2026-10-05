@@ -5,7 +5,8 @@
     "smoke": [
       "/sbin/kanidmd",
       "version"
-    ]
+    ],
+    "user": "65532:65532"
   },
   "kanidm-radius": {
     "runtime": "upstream",
@@ -13,7 +14,8 @@
     "smoke": [
       "/usr/sbin/radiusd",
       "-v"
-    ]
+    ],
+    "user": "497:496"
   },
   "stalwart": {
     "runtime": "upstream",
@@ -21,7 +23,8 @@
     "smoke": [
       "/usr/local/bin/stalwart",
       "--version"
-    ]
+    ],
+    "user": "2000:2000"
   },
   "prometheus": {
     "runtime": "scratch",
@@ -32,7 +35,8 @@
     "smoke": [
       "/bin/prometheus",
       "--version"
-    ]
+    ],
+    "user": "65532:65532"
   },
   "blackbox-exporter": {
     "runtime": "scratch",
@@ -42,7 +46,8 @@
     "smoke": [
       "/bin/blackbox_exporter",
       "--version"
-    ]
+    ],
+    "user": "65532:65532"
   },
   "postgres-exporter": {
     "runtime": "scratch",
@@ -52,7 +57,8 @@
     "smoke": [
       "/bin/postgres_exporter",
       "--version"
-    ]
+    ],
+    "user": "65532:65532"
   },
   "node-exporter": {
     "runtime": "scratch",
@@ -62,7 +68,8 @@
     "smoke": [
       "/bin/node_exporter",
       "--version"
-    ]
+    ],
+    "user": "65532:65532"
   },
   "alertmanager": {
     "runtime": "scratch",
@@ -73,7 +80,8 @@
     "smoke": [
       "/bin/alertmanager",
       "--version"
-    ]
+    ],
+    "user": "65532:65532"
   },
   "postgresql": {
     "runtime": "upstream",
@@ -81,6 +89,7 @@
     "smoke": [
       "postgres",
       "--version"
-    ]
+    ],
+    "user": "70:70"
   }
 }

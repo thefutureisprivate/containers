@@ -3,6 +3,7 @@ import io
 import json
 from pathlib import Path
 import struct
+import tarfile
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -13,6 +14,34 @@ SPEC.loader.exec_module(prepare)
 
 
 class PreparationTests(unittest.TestCase):
+    def test_runtime_rejects_root_implicit_groups_and_user_drift(self):
+        spec = {"user": "70:70"}
+        for user in (None, "", "root", "0", "0:70", "70:0", "70", "postgres", "71:71"):
+            with self.subTest(user=user), self.assertRaisesRegex(ValueError, "non-root UID:GID"):
+                prepare.audit_runtime("postgresql", {"User": user}, spec)
+        prepare.audit_runtime("postgresql", {"User": "70:70"}, spec)
+        with self.assertRaisesRegex(ValueError, "additional capabilities"):
+            prepare.audit_runtime("postgresql", {"User": "70:70", "Labels": {"io.containers.capabilities": "CAP_CHOWN"}}, spec)
+
+    def test_rootfs_rejects_setid_and_file_capabilities(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "rootfs.tar"
+            for mode, headers, error in ((0o4755, {}, "setuid/setgid"), (0o2755, {}, "setuid/setgid"),
+                                         (0o755, {"SCHILY.xattr.security.capability": "example"}, "file capability"),
+                                         (0o755, {"LIBARCHIVE.xattr.security.capability": "example"}, "file capability")):
+                with tarfile.open(path, "w", format=tarfile.PAX_FORMAT) as archive:
+                    entry = tarfile.TarInfo("usr/bin/example")
+                    entry.mode, entry.pax_headers = mode, headers
+                    archive.addfile(entry)
+                with self.subTest(mode=mode, headers=headers), self.assertRaisesRegex(ValueError, error):
+                    prepare.audit_rootfs(path, "example", {"binaries": []})
+            with tarfile.open(path, "w") as archive:
+                entry = tarfile.TarInfo("var/lib/postgresql")
+                entry.type, entry.mode = tarfile.DIRTYPE, 0o3777
+                archive.addfile(entry)
+            # Directory setgid/sticky bits do not grant process privileges.
+            prepare.audit_rootfs(path, "example", {"binaries": []})
+
     def test_podman_metadata_location_and_empty_port_values(self):
         health = {"Test": ["CMD", "/app", "check"], "Interval": 1000}
         for key in ("Healthcheck", "HealthCheck"):
@@ -70,12 +99,26 @@ class PreparationTests(unittest.TestCase):
                 (directory / "Dockerfile").write_text(value + "\n")
                 with patch.object(prepare, "ROOT", root), self.assertRaises(ValueError):
                     prepare.recipe("example")
+            for tag in ("v0.16.24-alpine", "18.6-alpine3.24"):
+                (directory / "Dockerfile").write_text(f"FROM example:{tag}@sha256:" + "a" * 64 + "\n")
+                with patch.object(prepare, "ROOT", root):
+                    self.assertEqual(prepare.recipe("example")[2], tag.removeprefix("v"))
 
     def test_requested_catalog_is_complete_and_pinned(self):
         expected = {"kanidm", "kanidm-radius", "stalwart", "prometheus", "blackbox-exporter", "postgres-exporter", "node-exporter", "alertmanager", "postgresql"}
         self.assertEqual(set(prepare.images()), expected)
         for name in expected:
             prepare.recipe(name)
+
+    def test_alpine_images_cannot_silently_change_variant(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for name in ("stalwart", "postgresql"):
+                directory = root / "containers" / name
+                directory.mkdir(parents=True)
+                (directory / "Dockerfile").write_text("FROM example:1.0.0@sha256:" + "a" * 64 + "\n")
+                with patch.object(prepare, "ROOT", root), self.assertRaisesRegex(ValueError, "Alpine variant"):
+                    prepare.recipe(name)
 
 
 if __name__ == "__main__":

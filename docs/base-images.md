@@ -2,7 +2,7 @@
 
 Recommendation: use `scratch` for applications that can ship as a self-contained static executable. Use a supported Alpine release when a workload needs musl, a language runtime, or shell tooling and those requirements have been tested on Alpine. Choose per application; neither option is universally more secure.
 
-The five Go monitoring images use scratch after static-link validation, with a CA bundle and upstream licenses. Kanidm uses its upstream scratch filesystem with required dynamic libraries. PostgreSQL uses its supported Alpine variant. RADIUS and Stalwart retain their upstream openSUSE and Debian runtimes: a switch to musl would need separate compatibility and integration testing.
+The five Go monitoring images use scratch after static-link validation, with a CA bundle and upstream licenses. Kanidm uses its upstream scratch filesystem with required dynamic libraries. PostgreSQL and Stalwart use their official Alpine variants. RADIUS retains its upstream openSUSE runtime and native integration module.
 
 ## Why these images use different runtimes
 
@@ -12,7 +12,7 @@ The five Go monitoring images use scratch after static-link validation, with a C
 | Kanidm | Upstream `scratch` filesystem | Upstream already assembles the server, web assets and required dynamic libraries into a minimal runtime. Scratch does not imply a statically linked executable. |
 | PostgreSQL | Alpine | The official variant provides the native libraries, initialization tools and entrypoint scripts together. A scratch variant would require assembling and maintaining those dependencies ourselves. |
 | Kanidm RADIUS | Upstream openSUSE | Preserve the supported FreeRADIUS installation and its native Kanidm integration module. |
-| Stalwart | Upstream Debian | Preserve its supported native libraries, runtime tooling and file capability for binding low ports. |
+| Stalwart | Official Alpine variant | Upstream supplies a musl build with certificates and runtime tooling. The image removes its file capability and runs as UID/GID 2000; bootstrap works with all capabilities dropped. |
 
 This is a compatibility and maintenance decision per application, not a security ranking of distributions. Scratch reduces shipped components where dependencies are easy to enumerate; it also makes us responsible for supplying and updating every required file. Using one base everywhere would require additional porting and integration testing.
 
@@ -32,7 +32,8 @@ Alpine supplies musl, BusyBox and a package manager, and builds its userland wit
 ## What this repository implements
 
 - The monitoring images copy upstream executables into scratch and validate that they have no ELF interpreter. Required certificates, configuration and licenses are included.
-- Monitoring images and Kanidm declare numeric UID/GID `65532:65532`. Writable storage, network access and capabilities are selected according to each service's needs.
+- Every image declares a reviewed numeric, nonzero UID and GID. Monitoring images and Kanidm use `65532:65532`, RADIUS uses `497:496`, Stalwart uses `2000:2000`, and PostgreSQL uses `70:70`, including database initialization.
+- Preparation rejects setuid/setgid files and file capabilities. RADIUS loses its privilege-granting helpers; Stalwart loses its low-port file capability. Smoke tests run with all capabilities dropped and `no-new-privileges`. Configure unprivileged internal listeners and storage ownership at deployment.
 - A source allowlist keeps local files and credentials out of uploads. OBS signs the resulting image with its managed project key.
 - The verification command requires the pinned key and a matching image identity, rejecting unsigned content.
 
