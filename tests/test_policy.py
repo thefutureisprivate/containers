@@ -73,9 +73,12 @@ class PolicyTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "ONBUILD"):
                 policy.verify_import(path, reference)
 
-    def test_all_nine_recipes_have_matching_pins_and_nonroot_users(self):
+    def test_all_recipes_have_matching_pins_and_nonroot_users(self):
         expected = {"kanidm", "kanidm-radius", "stalwart", "prometheus", "blackbox-exporter",
-                    "postgres-exporter", "node-exporter", "alertmanager", "postgresql"}
+                    "postgres-exporter", "node-exporter", "alertmanager", "postgresql",
+                    "certspotter", "certbot", "nginx", "element-web", "synapse",
+                    "matrix-authentication-service", "home-assistant", "openthread-border-router",
+                    "eclipse-mosquitto", "python-matter-server", "vaultwarden"}
         self.assertEqual(set(policy.images()), expected)
         for name in expected:
             policy.check_recipe(ROOT / "containers" / name, name)

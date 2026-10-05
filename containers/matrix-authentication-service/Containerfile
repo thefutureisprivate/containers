@@ -1,9 +1,10 @@
 # Immutable upstream input; Dependabot updates the tag and digest in PRs.
-FROM registry-1.docker.io/library/postgres:18.6-alpine3.24@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
+FROM ghcr.io/element-hq/matrix-authentication-service:1.26.0@sha256:e089f1048a1d4a9a492ed17b9fe759100f1bd619407b001f5927928d88b780c4
 #!DisableOBSContainerSupport
-# The official entrypoint supports initialization directly as postgres.
+
 COPY --chmod=0644 hardened-malloc.so /usr/local/lib/libhardened_malloc.so
 COPY --chmod=0755 allocator-check /usr/local/bin/allocator-check
 COPY --chmod=0644 hardened-malloc.LICENSE /usr/share/licenses/hardened_malloc/LICENSE
 ENV LD_PRELOAD=/usr/local/lib/libhardened_malloc.so
-USER 70:70
+COPY --chmod=0644 ld.so.preload /etc/ld.so.preload
+USER 65532:65532

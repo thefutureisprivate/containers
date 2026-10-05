@@ -93,6 +93,10 @@ def package_manifest():
     return json.loads((ROOT / "containers/obs-service-container_policy/images.json").read_text())
 
 
+def source_packages():
+    return ["hardened-malloc", "obs-service-container_policy", *package_manifest()]
+
+
 def check():
     sys.path.insert(0, str(ROOT / "containers/obs-service-container_policy"))
     from policy import check_recipe
@@ -144,7 +148,7 @@ def configure(client):
         client.request("POST", source_path(), b"", {"cmd": "createkey"})
     pin_key(client)
     client.request("PUT", source_path(filename="_config"), (ROOT / "_config").read_bytes())
-    for name in ["obs-service-container_policy", *package_manifest()]:
+    for name in source_packages():
         meta = ET.Element("package", name=name, project=project())
         ET.SubElement(meta, "title").text = name
         ET.SubElement(meta, "description").text = "Built, checked, signed and published by OBS from Git."
@@ -155,7 +159,7 @@ def configure(client):
 
 
 def refresh(client):
-    for name in ["obs-service-container_policy", *package_manifest()]:
+    for name in source_packages():
         client.request("POST", source_path(name), b"", {"cmd": "runservice"})
     print("Requested OBS to fetch the current main branch")
 

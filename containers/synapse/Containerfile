@@ -1,14 +1,15 @@
 # Immutable upstream input; Dependabot updates the tag and digest in PRs.
-FROM registry-1.docker.io/kanidm/radius:1.11.2@sha256:38385f714365588f160b0329eec6298b991ddec64a260ae22de88baafcc18711
+FROM registry-1.docker.io/matrixdotorg/synapse:v1.162.0@sha256:6b84a7bbac36f080b2d2e51e0289cf1b08b349598ea44a558df38d558f2c2311
 #!DisableOBSContainerSupport
-# Build-time root only. User-namespace mapping helpers carry file capabilities.
 USER 0:0
-RUN rm /usr/bin/newuidmap /usr/bin/newgidmap \
-    && find / -xdev -type f \( -perm -4000 -o -perm -2000 \) -exec chmod a-s {} +
+RUN find / -xdev -type f \( -perm -4000 -o -perm -2000 \) -exec chmod a-s '{}' +
+# The upstream launcher otherwise overwrites LD_PRELOAD with jemalloc.
+RUN rm -f /usr/lib/*-linux-gnu/libjemalloc.so* && mkdir -p /data && chown 991:991 /data
+ENV HOME=/data PYTHONMALLOC=malloc
+VOLUME ["/data"]
 COPY --chmod=0644 hardened-malloc.so /usr/local/lib/libhardened_malloc.so
 COPY --chmod=0755 allocator-check /usr/local/bin/allocator-check
 COPY --chmod=0644 hardened-malloc.LICENSE /usr/share/licenses/hardened_malloc/LICENSE
 ENV LD_PRELOAD=/usr/local/lib/libhardened_malloc.so
 COPY --chmod=0644 ld.so.preload /etc/ld.so.preload
-USER 497:496
-EXPOSE 1812/udp 1813/udp
+USER 991:991

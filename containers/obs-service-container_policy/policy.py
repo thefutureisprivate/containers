@@ -18,7 +18,10 @@ import zipfile
 CATALOG = Path(__file__).with_name("images.json")
 PIN = re.compile(r"^FROM ([a-z0-9./_-]+):([A-Za-z0-9_.-]+)@sha256:([0-9a-f]{64})(?: AS upstream)?$", re.M)
 ASSET = re.compile(r"^#!RemoteAsset: (https://github.com/stalwartlabs/webui/releases/download/v\d+\.\d+\.\d+/webui.zip) sha256:([0-9a-f]{64}) webui.zip$", re.M)
-INPUT_FILES = ("Containerfile", "LICENSE", "NOTICE", "enable-webui.py")
+INPUT_FILES = ("Containerfile", "LICENSE", "NOTICE", "enable-webui.py", "nginx.conf",
+               "default.conf", "entrypoint.sh", "src/go.mod", "src/go.sum", "src/tools.go")
+ALLOCATOR = Path("/usr/lib64/obs-hardened-malloc")
+PRELOAD = "/usr/local/lib/libhardened_malloc.so"
 
 
 def assets(content):
@@ -59,7 +62,14 @@ def recipe(directory):
     for line in content.splitlines():
         if line.startswith("FROM ") and line != "FROM scratch" and not PIN.fullmatch(line):
             raise ValueError("Unpinned FROM instruction")
-    return content, f"{registry}:{tag}@sha256:{digest}", tag.removeprefix("v")
+    version = tag.removeprefix("v")
+    if (Path(directory) / "src/go.mod").is_file():
+        module = (Path(directory) / "src/go.mod").read_text()
+        match = re.search(r"software\.sslmate\.com/src/certspotter v(\d+\.\d+\.\d+)", module)
+        if not match:
+            raise ValueError("Cert Spotter requires a pinned upstream Go module")
+        version = match[1]
+    return content, f"{registry}:{tag}@sha256:{digest}", version
 
 
 def check_recipe(directory, name):
@@ -77,6 +87,14 @@ def check_recipe(directory, name):
         raise ValueError(f"{name}: Dockerfile and Containerfile remote assets differ")
     if name == "stalwart" and not assets(content):
         raise ValueError("Stalwart requires its pinned Web UI bundle")
+    allocator = images()[name]["allocator"]
+    if allocator in ("musl", "glibc"):
+        if f"ENV LD_PRELOAD={PRELOAD}" not in content or "COPY --chmod=0755 allocator-check" not in content:
+            raise ValueError(f"{name}: missing shared allocator or loading check")
+        if allocator == "glibc" and "COPY --chmod=0644 ld.so.preload /etc/ld.so.preload" not in content:
+            raise ValueError(f"{name}: glibc requires global allocator preloading")
+    elif allocator != "static-go" or "LD_PRELOAD" in content:
+        raise ValueError(f"{name}: unreviewed allocator or ineffective static preload")
     return content, reference, version
 
 def podman(*args, capture=False, merge_stderr=False, timeout=None, input_text=None):
@@ -111,6 +129,10 @@ def audit_runtime(name, config, spec):
         raise ValueError(f"{name}: runtime must use the reviewed non-root UID:GID {spec['user']}")
     if (config.get("Labels") or {}).get("io.containers.capabilities"):
         raise ValueError(f"{name}: image must not request additional capabilities")
+    if spec.get("allocator") in ("musl", "glibc"):
+        env = dict(item.split("=", 1) for item in config.get("Env", []) if "=" in item)
+        if env.get("LD_PRELOAD") != PRELOAD:
+            raise ValueError(f"{name}: runtime must preload the shared allocator")
 
 def static_elf(stream):
     """Reject dynamically linked binaries without executing an untrusted ldd."""
@@ -155,6 +177,39 @@ def audit_rootfs(path, name, spec):
             bundle = archive.extractfile("usr/share/stalwart/webui.zip")
             if hashlib.file_digest(bundle, "sha256").hexdigest() != expected:
                 raise ValueError("Embedded Web UI differs from the verified OBS input")
+        if spec.get("allocator") in ("musl", "glibc"):
+            provenance = json.load(archive.extractfile("usr/share/obs-container/provenance.json"))
+            allocator = provenance["allocator"]
+            if allocator["libc"] != spec["allocator"]:
+                raise ValueError("Wrong allocator libc variant")
+            hashes = allocator["build"]["artifacts"][spec["allocator"]]
+            for source, target in (("libhardened_malloc.so", PRELOAD),
+                                   ("allocator-check", "/usr/local/bin/allocator-check")):
+                actual = hashlib.file_digest(archive.extractfile(target.lstrip("/")), "sha256").hexdigest()
+                if actual != hashes[source]:
+                    raise ValueError("Container allocator differs from the shared OBS build")
+            if spec["allocator"] == "glibc":
+                if archive.extractfile("etc/ld.so.preload").read().decode().strip() != PRELOAD:
+                    raise ValueError("glibc global allocator configuration differs")
+
+
+def prepare_allocator(name, outdir):
+    """Copy a verified artifact from the shared RPM, never compile per image."""
+    libc = images()[name]["allocator"]
+    if libc == "static-go":
+        return {"libc": None, "reason": images()[name]["allocator_note"]}
+    build = json.loads((ALLOCATOR / "manifest.json").read_text())
+    for filename, target in (("libhardened_malloc.so", "hardened-malloc.so"),
+                             ("allocator-check", "allocator-check")):
+        source = ALLOCATOR / libc / filename
+        if hashlib.sha256(source.read_bytes()).hexdigest() != build["artifacts"][libc][filename]:
+            raise ValueError("Shared allocator RPM artifact checksum mismatch")
+        shutil.copyfile(source, outdir / target)
+    shutil.copyfile(ALLOCATOR / "LICENSE", outdir / "hardened-malloc.LICENSE")
+    if libc == "glibc":
+        (outdir / "ld.so.preload").write_text(PRELOAD + "\n")
+    return {"libc": libc, "build": build,
+            "coverage": images()[name].get("allocator_note", "Dynamically linked native malloc allocations")}
 
 
 def archive_config(archive):
@@ -226,6 +281,17 @@ def prepare_build(name, outdir):
     content, reference, version = check_recipe(directory, name)
     config_id = verify_import(directory / "containers", reference)
     remote_assets = verify_assets(directory, content)
+    outdir = Path(outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+    allocator = prepare_allocator(name, outdir)
+    generated = {}
+    if name == "certspotter":
+        candidates = list(directory.glob("*vendor.tar.gz"))
+        if len(candidates) != 1:
+            raise ValueError("OBS go_modules must provide exactly one vendor archive")
+        generated["vendor.tar.gz"] = hashlib.sha256(candidates[0].read_bytes()).hexdigest()
+        if candidates[0].name != "vendor.tar.gz":
+            shutil.copyfile(candidates[0], outdir / "vendor.tar.gz")
     info = (directory / "_scmsync.obsinfo").read_text()
     match = re.search(r"^commit: ([0-9a-f]{40,64})$", info, re.M)
     if not match:
@@ -239,9 +305,9 @@ def prepare_build(name, outdir):
                   "inputs_sha256": inputs, "upstream_config_sha256": config_id,
                   "policy_sha256": policy_hashes,
                   "assets": remote_assets,
+                  "generated_sources_sha256": generated,
+                  "allocator": allocator,
                   "runtime_user": images()[name]["user"]}
-    outdir = Path(outdir)
-    outdir.mkdir(parents=True, exist_ok=True)
     (outdir / "provenance.json").write_text(json.dumps(provenance, sort_keys=True, indent=2) + "\n")
     # The imported archive has a local tag. It has just been checked against the
     # immutable pin, including the config and uncompressed layer hashes.

@@ -1,0 +1,17 @@
+# Immutable upstream input; Dependabot updates the tag and digest in PRs.
+FROM registry-1.docker.io/openthread/border-router:v2026.10.0@sha256:70d2260eb5022f4c40be4f50195a1952d49041fc766fb3b2f213b06dcdc31a18
+#!DisableOBSContainerSupport
+USER 0:0
+RUN find / -xdev -type f \( -perm -4000 -o -perm -2000 \) -exec chmod a-s '{}' +
+RUN mkdir -p /data /var/lib/thread /run/openthread && chown -R 65532:65532 /data /var/lib/thread /run/openthread
+# Host/network setup is an explicit deployment responsibility.
+COPY --chmod=0755 entrypoint.sh /usr/local/bin/otbr-entrypoint
+ENTRYPOINT ["/usr/local/bin/otbr-entrypoint"]
+VOLUME ["/var/lib/thread"]
+EXPOSE 8081
+COPY --chmod=0644 hardened-malloc.so /usr/local/lib/libhardened_malloc.so
+COPY --chmod=0755 allocator-check /usr/local/bin/allocator-check
+COPY --chmod=0644 hardened-malloc.LICENSE /usr/share/licenses/hardened_malloc/LICENSE
+ENV LD_PRELOAD=/usr/local/lib/libhardened_malloc.so
+COPY --chmod=0644 ld.so.preload /etc/ld.so.preload
+USER 65532:65532

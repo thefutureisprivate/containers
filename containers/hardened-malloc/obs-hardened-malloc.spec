@@ -45,15 +45,20 @@ make -C ../hardened-musl %{?_smp_mflags} CC="$musl_cc" CONFIG_NATIVE=false CONFI
 cp ../hardened-musl/out/libhardened_malloc.so artifacts/musl/
 "$musl_cc" -O2 -fPIE -pie -Wl,-z,relro,-z,now -Wl,--dynamic-linker=/lib/ld-musl-x86_64.so.1 %{SOURCE2} -ldl -o artifacts/musl/allocator-check
 env LD_PRELOAD="$PWD/artifacts/musl/libhardened_malloc.so" musl-1.2.5/sysroot/lib/libc.so artifacts/musl/allocator-check
+strip artifacts/glibc/* artifacts/musl/*
 python3 %{SOURCE3} artifacts %{version} %{SOURCE0} %{SOURCE1}
 cp LICENSE artifacts/LICENSE
 
+%check
+env LD_PRELOAD="$PWD/artifacts/glibc/libhardened_malloc.so" artifacts/glibc/allocator-check
+env LD_PRELOAD="$PWD/artifacts/musl/libhardened_malloc.so" musl-1.2.5/sysroot/lib/libc.so artifacts/musl/allocator-check
+
 %install
-mkdir -p %{buildroot}/usr/share/obs-hardened-malloc
-cp -a artifacts/. %{buildroot}/usr/share/obs-hardened-malloc/
+mkdir -p %{buildroot}%{_libdir}/obs-hardened-malloc
+cp -a artifacts/. %{buildroot}%{_libdir}/obs-hardened-malloc/
 
 %files
-/usr/share/obs-hardened-malloc/
+%{_libdir}/obs-hardened-malloc/
 
 %changelog
 * Mon Oct 05 2026 Containers maintainers <noreply@github.com> - 2026100200

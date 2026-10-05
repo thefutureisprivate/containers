@@ -6,7 +6,8 @@
       "/sbin/kanidmd",
       "version"
     ],
-    "user": "65532:65532"
+    "user": "65532:65532",
+    "allocator": "glibc"
   },
   "kanidm-radius": {
     "runtime": "upstream",
@@ -15,7 +16,8 @@
       "/usr/sbin/radiusd",
       "-v"
     ],
-    "user": "497:496"
+    "user": "497:496",
+    "allocator": "glibc"
   },
   "stalwart": {
     "runtime": "upstream",
@@ -24,7 +26,9 @@
       "/usr/local/bin/stalwart",
       "--version"
     ],
-    "user": "2000:2000"
+    "user": "2000:2000",
+    "allocator": "musl",
+    "allocator_note": "Native libc allocations only; the upstream Rust server embeds jemalloc."
   },
   "prometheus": {
     "runtime": "scratch",
@@ -36,7 +40,9 @@
       "/bin/prometheus",
       "--version"
     ],
-    "user": "65532:65532"
+    "user": "65532:65532",
+    "allocator": "static-go",
+    "allocator_note": "Static Go application; its Go heap cannot use LD_PRELOAD."
   },
   "blackbox-exporter": {
     "runtime": "scratch",
@@ -47,7 +53,9 @@
       "/bin/blackbox_exporter",
       "--version"
     ],
-    "user": "65532:65532"
+    "user": "65532:65532",
+    "allocator": "static-go",
+    "allocator_note": "Static Go application; its Go heap cannot use LD_PRELOAD."
   },
   "postgres-exporter": {
     "runtime": "scratch",
@@ -58,7 +66,9 @@
       "/bin/postgres_exporter",
       "--version"
     ],
-    "user": "65532:65532"
+    "user": "65532:65532",
+    "allocator": "static-go",
+    "allocator_note": "Static Go application; its Go heap cannot use LD_PRELOAD."
   },
   "node-exporter": {
     "runtime": "scratch",
@@ -69,7 +79,9 @@
       "/bin/node_exporter",
       "--version"
     ],
-    "user": "65532:65532"
+    "user": "65532:65532",
+    "allocator": "static-go",
+    "allocator_note": "Static Go application; its Go heap cannot use LD_PRELOAD."
   },
   "alertmanager": {
     "runtime": "scratch",
@@ -81,7 +93,9 @@
       "/bin/alertmanager",
       "--version"
     ],
-    "user": "65532:65532"
+    "user": "65532:65532",
+    "allocator": "static-go",
+    "allocator_note": "Static Go application; its Go heap cannot use LD_PRELOAD."
   },
   "postgresql": {
     "runtime": "upstream",
@@ -90,6 +104,124 @@
       "postgres",
       "--version"
     ],
-    "user": "70:70"
+    "user": "70:70",
+    "allocator": "musl"
+  },
+  "certspotter": {
+    "runtime": "scratch",
+    "binaries": [
+      "/usr/local/bin/certspotter"
+    ],
+    "smoke": [
+      "/usr/local/bin/certspotter",
+      "-h"
+    ],
+    "user": "65532:65532",
+    "allocator": "static-go",
+    "allocator_note": "Static Go application; its Go heap cannot use LD_PRELOAD.",
+    "version_from": "src/go.mod"
+  },
+  "certbot": {
+    "runtime": "upstream",
+    "binaries": [],
+    "smoke": [
+      "certbot",
+      "--version"
+    ],
+    "user": "65532:65532",
+    "allocator": "musl"
+  },
+  "nginx": {
+    "runtime": "upstream",
+    "binaries": [],
+    "smoke": [
+      "nginx",
+      "-v"
+    ],
+    "user": "101:101",
+    "allocator": "musl"
+  },
+  "element-web": {
+    "runtime": "upstream",
+    "binaries": [],
+    "smoke": [
+      "nginx",
+      "-v"
+    ],
+    "user": "101:101",
+    "allocator": "musl"
+  },
+  "synapse": {
+    "runtime": "upstream",
+    "binaries": [],
+    "smoke": [
+      "python",
+      "-c",
+      "import synapse; print(synapse.__version__)"
+    ],
+    "user": "991:991",
+    "allocator": "glibc"
+  },
+  "matrix-authentication-service": {
+    "runtime": "upstream",
+    "binaries": [],
+    "smoke": [
+      "/usr/local/bin/mas-cli",
+      "--version"
+    ],
+    "user": "65532:65532",
+    "allocator": "glibc"
+  },
+  "home-assistant": {
+    "runtime": "upstream",
+    "binaries": [],
+    "smoke": [
+      "python3",
+      "-m",
+      "homeassistant",
+      "--version"
+    ],
+    "user": "65532:65532",
+    "allocator": "musl"
+  },
+  "openthread-border-router": {
+    "runtime": "upstream",
+    "binaries": [],
+    "smoke": [
+      "/usr/sbin/otbr-agent",
+      "--version"
+    ],
+    "user": "65532:65532",
+    "allocator": "glibc"
+  },
+  "eclipse-mosquitto": {
+    "runtime": "upstream",
+    "binaries": [],
+    "smoke": [
+      "/usr/sbin/mosquitto",
+      "-h"
+    ],
+    "user": "1883:1883",
+    "allocator": "musl"
+  },
+  "python-matter-server": {
+    "runtime": "upstream",
+    "binaries": [],
+    "smoke": [
+      "matter-server",
+      "--help"
+    ],
+    "user": "65532:65532",
+    "allocator": "glibc"
+  },
+  "vaultwarden": {
+    "runtime": "upstream",
+    "binaries": [],
+    "smoke": [
+      "/vaultwarden",
+      "--version"
+    ],
+    "user": "65532:65532",
+    "allocator": "glibc"
   }
 }

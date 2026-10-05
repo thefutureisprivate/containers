@@ -11,11 +11,25 @@ updates:
       - /containers/node-exporter
       - /containers/alertmanager
       - /containers/postgresql
+      - /containers/certspotter
+      - /containers/certbot
+      - /containers/nginx
+      - /containers/element-web
+      - /containers/synapse
+      - /containers/matrix-authentication-service
+      - /containers/home-assistant
+      - /containers/openthread-border-router
+      - /containers/eclipse-mosquitto
+      - /containers/python-matter-server
+      - /containers/vaultwarden
     schedule:
       interval: daily
       time: "06:00"
       timezone: Europe/Berlin
-    open-pull-requests-limit: 15
+    open-pull-requests-limit: 30
+    ignore:
+      - dependency-name: "registry-1.docker.io/library/eclipse-mosquitto"
+        update-types: ["version-update:semver-major"]
     groups:
       kanidm:
         patterns:
@@ -24,3 +38,12 @@ updates:
           - "registry-1.docker.io/kanidm/*"
     commit-message:
       prefix: "Update container"
+  - package-ecosystem: gomod
+    directory: /containers/certspotter/src
+    schedule:
+      interval: daily
+      time: "06:00"
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "Update Cert Spotter"

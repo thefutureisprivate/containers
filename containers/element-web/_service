@@ -1,0 +1,5 @@
+<services>
+  <service name="container_policy" mode="buildtime">
+    <param name="name">element-web</param>
+  </service>
+</services>

@@ -5,7 +5,7 @@ BuildEngine:
 Type: docker
 BuildEngine: podman
 # Include the policy RPM in rebuild metadata, not only build-environment support.
-Substitute: build-packages:docker obs-container-policy-revision
+Substitute: build-packages:docker obs-container-policy-revision obs-hardened-malloc
 %endif
 Repotype: none
 Patterntype: none

@@ -23,6 +23,76 @@ def audit_processes(container):
             raise ValueError("Container process has root identity or capabilities: " + " ".join(row))
 
 
+def check_allocator(container):
+    podman("exec", container, "/usr/local/bin/allocator-check", "--pid1")
+
+
+def expansion_smoke(name, image, common):
+    """Offline startup checks; hardware and external identity services need deployment tests."""
+    if name == "certbot":
+        podman("run", "--rm", *common, image, "plugins", "--text",
+               "--config-dir=/tmp/config", "--work-dir=/tmp/work", "--logs-dir=/tmp/logs")
+        return
+    if name == "matrix-authentication-service":
+        podman("run", "--rm", *common, image, "config", "--help")
+        return
+    if name == "python-matter-server":
+        podman("run", "--rm", *common, "--entrypoint=python3", image, "-c",
+               "import chip.native; chip.native.GetLibraryHandle(); print('Matter native SDK loaded')")
+        return
+    if name in ("certspotter", "openthread-border-router"):
+        return
+    flags = common.copy()
+    command = []
+    if name in ("nginx", "element-web"):
+        pass
+    elif name == "eclipse-mosquitto":
+        flags += ["--entrypoint=sh"]
+        command = ["-ec", "printf 'listener 1883 127.0.0.1\\nallow_anonymous true\\npersistence false\\n' > /tmp/smoke.conf; "
+                   "exec /usr/sbin/mosquitto -c /tmp/smoke.conf"]
+    elif name == "synapse":
+        flags += ["--memory=1g", "--tmpfs=/data:rw,mode=1777,size=128m",
+                  "--env=SYNAPSE_SERVER_NAME=obs.invalid", "--env=SYNAPSE_REPORT_STATS=no", "--entrypoint=sh"]
+        command = ["-ec", "python /start.py generate >/tmp/generate.log 2>&1; exec python /start.py"]
+    elif name == "home-assistant":
+        flags += ["--memory=2g", "--tmpfs=/config:rw,mode=1777,size=128m", "--entrypoint=sh"]
+        command = ["-ec", "printf 'http:\\n' > /config/configuration.yaml; "
+                   "exec python3 -P -m homeassistant --config /config --skip-pip"]
+    elif name == "vaultwarden":
+        flags += ["--tmpfs=/data:rw,mode=1777,size=128m", "--env=ROCKET_WORKERS=2"]
+    else:
+        raise ValueError("Missing smoke test for " + name)
+    container = podman("run", "--detach", *flags, image, *command, capture=True).strip()
+    try:
+        if name in ("nginx", "element-web"):
+            page = wait_for_command(container, "wget", "-qO-", "http://127.0.0.1:8080/")
+            if "<html" not in page.lower():
+                raise ValueError(name + " did not serve its HTML")
+            if name == "element-web":
+                config = json.loads(podman("exec", container, "wget", "-qO-", "http://127.0.0.1:8080/config.json", capture=True))
+                if not isinstance(config, dict):
+                    raise ValueError("Element configuration is not an object")
+        elif name == "eclipse-mosquitto":
+            wait_for_command(container, "mosquitto_pub", "-h", "127.0.0.1", "-t", "obs-check", "-r", "-m", "42")
+            message = podman("exec", container, "mosquitto_sub", "-h", "127.0.0.1", "-t", "obs-check",
+                             "-C", "1", "-W", "5", capture=True)
+            if message.strip() != "42":
+                raise ValueError("MQTT round trip failed")
+        elif name == "synapse":
+            wait_for_command(container, "python", "-c",
+                             "import urllib.request; assert urllib.request.urlopen('http://127.0.0.1:8008/health').status == 200")
+        elif name == "home-assistant":
+            wait_for_command(container, "python3", "-c",
+                             "import http.client; c=http.client.HTTPConnection('127.0.0.1',8123); c.request('GET','/'); "
+                             "assert c.getresponse().status in (200,401,404)")
+        elif name == "vaultwarden":
+            wait_for_command(container, "curl", "--fail", "--silent", "http://127.0.0.1:8080/alive")
+        audit_processes(container)
+        check_allocator(container)
+    finally:
+        podman("rm", "--force", "--volumes", container)
+
+
 def wait_for_command(container, *command):
     failure = ""
     for _ in range(60):
@@ -112,6 +182,8 @@ def smoke(name, image):
     if not output.strip():
         raise ValueError(f"{name}: version command produced no output")
     print(output.strip(), flush=True)
+    if spec["allocator"] in ("glibc", "musl"):
+        podman("run", "--rm", *common, "--entrypoint=/usr/local/bin/allocator-check", image)
     if name == "kanidm-radius":
         podman("run", "--rm", *common, "--entrypoint=/usr/local/bin/kanidm_radiusd", image, "--help")
     if name == "postgresql":
@@ -134,6 +206,7 @@ def smoke(name, image):
             if result.strip() != "42":
                 raise ValueError("PostgreSQL query failed")
             audit_processes(container)
+            check_allocator(container)
         except ValueError:
             # This fresh database has only the disposable password generated
             # above. Redact it before printing initialization diagnostics.
@@ -180,6 +253,8 @@ def smoke(name, image):
                 podman("exec", container, "/bin/amtool", "check-config", "/etc/alertmanager/alertmanager.yml")
         finally:
             podman("rm", "--force", "--volumes", container)
+    elif name not in ("kanidm", "kanidm-radius"):
+        expansion_smoke(name, image, common)
     print(f"Smoke test passed: {name}", flush=True)
 
 

@@ -8,4 +8,8 @@ RUN setcap -r /usr/local/bin/stalwart
 COPY --chmod=0644 webui.zip /usr/share/stalwart/webui.zip
 COPY --chmod=0644 LICENSE NOTICE /usr/share/licenses/stalwart-webui/
 LABEL org.stalwart.webui.version="1.0.11"
+COPY --chmod=0644 hardened-malloc.so /usr/local/lib/libhardened_malloc.so
+COPY --chmod=0755 allocator-check /usr/local/bin/allocator-check
+COPY --chmod=0644 hardened-malloc.LICENSE /usr/share/licenses/hardened_malloc/LICENSE
+ENV LD_PRELOAD=/usr/local/lib/libhardened_malloc.so
 USER 2000:2000

@@ -1,0 +1,16 @@
+# Immutable upstream input; Dependabot updates the tag and digest in PRs.
+FROM registry-1.docker.io/library/golang:1.26.7-alpine3.24@sha256:28d89ee9cc0ff9fec75c82ca201e6bf7fdf9a679d4b7b24dfa04f2bb766bb468 AS upstream
+#!DisableOBSContainerSupport
+WORKDIR /src
+COPY src/ /src/
+ADD vendor.tar.gz /src/
+RUN CGO_ENABLED=0 GOPROXY=off GOSUMDB=off go build -mod=vendor -trimpath -ldflags="-s -w" -o /certspotter software.sslmate.com/src/certspotter/cmd/certspotter
+FROM scratch
+COPY --from=upstream /certspotter /usr/local/bin/certspotter
+COPY --from=upstream /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+ENV HOME=/data
+WORKDIR /data
+VOLUME ["/data"]
+ENTRYPOINT ["/usr/local/bin/certspotter"]
+CMD ["-watchlist", "/data/watchlist"]
+USER 65532:65532

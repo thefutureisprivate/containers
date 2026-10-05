@@ -26,7 +26,7 @@ def prepare(output):
     user, _ = obs.credentials(credential_file)
     tokens = ET.fromstring(client.request("GET", f"/person/{user}/token"))
     hooks = []
-    for name in ["obs-service-container_policy", *obs.package_manifest()]:
+    for name in obs.source_packages():
         description = "Containers Git refresh: " + name
         existing = next((e for e in tokens if e.get("description") == description
                          and e.get("project") == obs.project() and e.get("package") == name

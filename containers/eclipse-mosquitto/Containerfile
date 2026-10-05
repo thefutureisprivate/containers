@@ -1,0 +1,13 @@
+# Immutable upstream input; Dependabot updates the tag and digest in PRs.
+FROM registry-1.docker.io/library/eclipse-mosquitto:2.1.2-alpine@sha256:38c0da4f2ef84284d47b3b3eeea1cb3bdeabe81ee10caf0cd5c5ff61ee3ea408
+#!DisableOBSContainerSupport
+USER 0:0
+RUN find / -xdev -type f \( -perm -4000 -o -perm -2000 \) -exec chmod a-s '{}' +
+# Bypass the root-oriented permission repair in the upstream entrypoint.
+ENTRYPOINT ["/usr/sbin/mosquitto"]
+CMD ["-c", "/mosquitto/config/mosquitto.conf"]
+COPY --chmod=0644 hardened-malloc.so /usr/local/lib/libhardened_malloc.so
+COPY --chmod=0755 allocator-check /usr/local/bin/allocator-check
+COPY --chmod=0644 hardened-malloc.LICENSE /usr/share/licenses/hardened_malloc/LICENSE
+ENV LD_PRELOAD=/usr/local/lib/libhardened_malloc.so
+USER 1883:1883
