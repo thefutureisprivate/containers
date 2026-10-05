@@ -4,9 +4,17 @@
 
 Stalwart now uses the official `v0.16.24-alpine` image, pinned by digest. All nine images have explicit nonzero numeric users/groups: `65532:65532` for Kanidm and the five monitoring images, `497:496` for RADIUS, `2000:2000` for Stalwart and `70:70` for PostgreSQL. The prepared filesystems contain no setuid/setgid files or file capabilities.
 
-All 24 unit tests and all nine local smoke tests passed. Every smoke test used the image's default user, a read-only root filesystem, `--cap-drop=ALL` and `--security-opt=no-new-privileges`. Stalwart initialized fresh configuration/data volumes and its HTTP readiness endpoint responded on port 8080. PostgreSQL initialized a fresh data volume as UID 70 and answered `SELECT 42` over TCP after initialization. Monitoring services started and their configuration checks passed. Running service processes had non-root identities and empty bounding, effective and permitted capability sets. Kanidm and RADIUS binary checks do not include live identity/RADIUS integration.
+All 24 unit tests and all nine local smoke tests passed. Every smoke test used the image's default user, a read-only root filesystem, `--cap-drop=ALL` and `--security-opt=no-new-privileges`. Stalwart initialized fresh configuration/data volumes and its HTTP readiness endpoint responded on port 8080. PostgreSQL initialized fresh data as UID 70 and answered `SELECT 42` over TCP after initialization. Its smoke test checks named-volume-style copy-up permissions separately and uses tmpfs for database initialization to avoid CI host disk writeback delays. Monitoring services started and their configuration checks passed. Running service processes had non-root identities and empty bounding, effective and permitted capability sets. Kanidm and RADIUS binary checks do not include live identity/RADIUS integration.
 
 Stalwart deployment must use unprivileged internal listener ports, or a container network namespace configured to permit low ports without capabilities. PostgreSQL bind-mounted data must already be owned by `70:70`; its entrypoint no longer starts as root to change ownership.
+
+OBS built the three changed packages from source revision 2. All nine published images passed signature verification, matching-provenance checks, runtime UID/GID checks and a scan of their signed layers for setuid/setgid files and file capabilities. The six unchanged image digests are recorded below; the changed releases are:
+
+| Image release | Verified manifest digest |
+| --- | --- |
+| `kanidm-radius:1.11.2-2.1` | `sha256:f8e177d942e7e2121b9b1346649430b61a76582c7c382ec48860b82166b42668` |
+| `stalwart:0.16.24-alpine-2.1` | `sha256:61c89e4f031a54558152512e1abcc150b4281327a02225003d1a3fab13fead01` |
+| `postgresql:18.6-alpine3.24-2.1` | `sha256:596d878fd63a562a6c2de1cb791831d8577b9c99b5a4f7c57b9658e39caf824c` |
 
 ## Initial publication — 2026-10-03
 

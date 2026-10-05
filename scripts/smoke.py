@@ -21,16 +21,18 @@ def audit_processes(container):
 
 
 def wait_for_command(container, *command):
+    failure = ""
     for _ in range(60):
         try:
             return podman("exec", container, *command, capture=True, merge_stderr=True)
-        except subprocess.CalledProcessError:
+        except subprocess.CalledProcessError as error:
+            failure = (error.stdout or "").strip()[-1000:]
             state = json.loads(podman("inspect", "--format={{json .State}}", container, capture=True))
             if not state.get("Running"):
                 break
             time.sleep(1)
     # Bootstrap logs may contain generated credentials. Do not print them.
-    raise ValueError("Container initialization/readiness failed")
+    raise ValueError("Container initialization/readiness failed: " + failure)
 
 
 def smoke(name):
@@ -49,9 +51,14 @@ def smoke(name):
     if name == "kanidm-radius":
         podman("run", "--rm", *common, "--entrypoint=/usr/local/bin/kanidm_radiusd", image, "--help")
     if name == "postgresql":
-        # The anonymous data volume inherits the image's postgres ownership.
-        # Entry-point initialization and every exec use the image's default USER.
-        flags = common + ["--tmpfs=/run/postgresql:rw,mode=1777,size=8m",
+        # Check real volume copy-up permissions separately from database fsync.
+        podman("run", "--rm", *common, "--entrypoint=sh", image, "-ec",
+               'mkdir -p "$PGDATA"; test -w "$PGDATA"; '
+               'test "$(stat -c %u:%g "$PGDATA")" = "$(id -u):$(id -g)"')
+        # A bounded tmpfs avoids host disk writeback delays in initdb. The
+        # entrypoint creates PGDATA as its default user, without a root phase.
+        flags = common + ["--tmpfs=/var/lib/postgresql:rw,mode=1777,size=192m",
+                          "--tmpfs=/run/postgresql:rw,mode=1777,size=8m",
                           "--env", "POSTGRES_PASSWORD=" + secrets.token_hex(24)]
         container = podman("run", "--detach", *flags, image, capture=True).strip()
         try:
