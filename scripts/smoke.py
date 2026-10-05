@@ -57,9 +57,10 @@ def smoke(name):
                'test "$(stat -c %u:%g "$PGDATA")" = "$(id -u):$(id -g)"')
         # A bounded tmpfs avoids host disk writeback delays in initdb. The
         # entrypoint creates PGDATA as its default user, without a root phase.
+        password = secrets.token_hex(24)
         flags = common + ["--tmpfs=/var/lib/postgresql:rw,mode=1777,size=192m",
                           "--tmpfs=/run/postgresql:rw,mode=1777,size=8m",
-                          "--env", "POSTGRES_PASSWORD=" + secrets.token_hex(24)]
+                          "--env", "POSTGRES_PASSWORD=" + password]
         container = podman("run", "--detach", *flags, image, capture=True).strip()
         try:
             # The temporary initialization server has no TCP listener. This
@@ -69,6 +70,13 @@ def smoke(name):
             if result.strip() != "42":
                 raise ValueError("PostgreSQL query failed")
             audit_processes(container)
+        except ValueError:
+            # This fresh database has only the disposable password generated
+            # above. Redact it before printing initialization diagnostics.
+            log = podman("logs", container, capture=True, merge_stderr=True)
+            print(log.replace(password, "[redacted]")[-8000:], flush=True)
+            podman("top", container, "user", "comm", "etime")
+            raise
         finally:
             podman("rm", "--force", "--volumes", container)
     elif name == "stalwart":
