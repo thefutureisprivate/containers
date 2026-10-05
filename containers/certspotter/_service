@@ -1,6 +1,6 @@
 <services>
   <service name="go_modules">
-    <param name="archive">src</param>
+    <param name="archive">src.obscpio</param>
     <param name="basename">src</param>
   </service>
   <service name="container_policy" mode="buildtime">
