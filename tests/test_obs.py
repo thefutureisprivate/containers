@@ -82,8 +82,8 @@ class RepositoryTests(unittest.TestCase):
 
     def test_existing_unmanaged_files_are_not_deleted(self):
         client = Mock()
-        client.request.side_effect = [b'<package name="hello"/>', b'<directory><entry name="external" md5="abc"/></directory>']
-        with patch.object(obs, "packages", return_value={"hello": {"Dockerfile": b"FROM scratch"}}):
+        client.request.side_effect = [b'<package name="demo"/>', b'<directory><entry name="external" md5="abc"/></directory>']
+        with patch.object(obs, "packages", return_value={"demo": {"Dockerfile": b"FROM scratch"}}):
             with self.assertRaisesRegex(ValueError, "unexpected remote files"):
                 obs.publish(client)
         self.assertTrue(all(call.args[0] == "GET" for call in client.request.call_args_list))
@@ -91,24 +91,24 @@ class RepositoryTests(unittest.TestCase):
     def test_concurrent_source_changes_abort_before_commit(self):
         client = Mock()
         client.request.side_effect = [
-            b'<package name="hello"/>', b'<directory srcmd5="old"/>', b"ok", b'<directory srcmd5="changed"/>',
+            b'<package name="demo"/>', b'<directory srcmd5="old"/>', b"ok", b'<directory srcmd5="changed"/>',
         ]
-        with patch.object(obs, "packages", return_value={"hello": {"Dockerfile": b"FROM scratch"}}):
+        with patch.object(obs, "packages", return_value={"demo": {"Dockerfile": b"FROM scratch"}}):
             with self.assertRaisesRegex(ValueError, "changed during upload"):
                 obs.publish(client)
         self.assertFalse(any(call.args[0] == "POST" for call in client.request.call_args_list))
 
     def test_all_sources_are_staged_before_one_commit(self):
-        sources = {"Dockerfile": b"FROM scratch", "hello": b"example"}
+        sources = {"Dockerfile": b"FROM scratch", "demo": b"example"}
         revision = ET.fromstring(obs.filelist(sources))
         revision.set("rev", "1")
         committed = ET.tostring(revision)
         client = Mock()
         client.request.side_effect = [
-            b'<package name="hello"/>', b'<directory srcmd5="old"/>', b"ok", b"ok",
+            b'<package name="demo"/>', b'<directory srcmd5="old"/>', b"ok", b"ok",
             b'<directory srcmd5="old"/>', committed, committed, b"FROM scratch", b"example",
         ]
-        with patch.object(obs, "packages", return_value={"hello": sources}):
+        with patch.object(obs, "packages", return_value={"demo": sources}):
             obs.publish(client)
         calls = client.request.call_args_list
         writes = [call for call in calls if call.args[0] in {"PUT", "POST"}]
@@ -120,7 +120,7 @@ class RepositoryTests(unittest.TestCase):
         client = Mock()
         client.request.return_value = b"corrupted source"
         with self.assertRaisesRegex(RuntimeError, "SHA-256 readback mismatch"):
-            obs.check_source_bytes(client, "hello", ET.fromstring('<directory rev="1"/>'), {"Dockerfile": b"expected source"})
+            obs.check_source_bytes(client, "demo", ET.fromstring('<directory rev="1"/>'), {"Dockerfile": b"expected source"})
 
     def test_remote_key_rotation_is_not_silently_trusted(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -147,7 +147,7 @@ class RepositoryTests(unittest.TestCase):
             failure = subprocess.CalledProcessError(1, ["skopeo"])
             with patch.object(obs, "trusted_key"), patch.object(obs.subprocess, "run", side_effect=failure):
                 with self.assertRaises(subprocess.CalledProcessError):
-                    obs.verify("hello", "latest", target)
+                    obs.verify("prometheus", "latest", target)
             self.assertFalse(target.exists())
             self.assertEqual(list(Path(tmp).iterdir()), [])
 

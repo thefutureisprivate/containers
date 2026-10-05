@@ -2,7 +2,7 @@
 
 Recipes for [home:thefutureisprivate:containers](https://build.opensuse.org/project/show/home:thefutureisprivate:containers), maintained in [thefutureisprivate/containers](https://github.com/thefutureisprivate/containers). OBS builds the final images offline, signs them with its project key, and publishes them to `registry.opensuse.org`.
 
-The application images **repackage official upstream binaries pinned by tag and SHA-256 digest**. They do not independently compile those applications from source. The small `hello` example does compile from source in OBS.
+The application images **repackage official upstream binaries pinned by tag and SHA-256 digest**. They do not independently compile those applications from source.
 
 ## Images
 

@@ -1,6 +1,6 @@
 <project name="home:thefutureisprivate:containers">
   <title>Signed application containers</title>
-  <description>Application container images assembled offline in OBS from pinned upstream runtimes and signed with the OBS project key. Dependabot proposes input updates in GitHub PRs. The hello example is compiled from source.</description>
+  <description>Application container images assembled offline in OBS from pinned upstream runtimes and signed with the OBS project key. Dependabot proposes input updates in GitHub PRs.</description>
   <person userid="thefutureisprivate" role="maintainer"/>
   <build>
     <enable/>

@@ -4,6 +4,18 @@ Recommendation: use `scratch` for applications that can ship as a self-contained
 
 The five Go monitoring images use scratch after static-link validation, with a CA bundle and upstream licenses. Kanidm uses its upstream scratch filesystem with required dynamic libraries. PostgreSQL uses its supported Alpine variant. RADIUS and Stalwart retain their upstream openSUSE and Debian runtimes: a switch to musl would need separate compatibility and integration testing.
 
+## Why these images use different runtimes
+
+| Images | Runtime | Reason |
+| --- | --- | --- |
+| Prometheus, Alertmanager, blackbox exporter, PostgreSQL exporter, node exporter | `scratch` | Their static Go executables can run with selected configuration, certificates and data directories, without a shell or package manager. |
+| Kanidm | Upstream `scratch` filesystem | Upstream already assembles the server, web assets and required dynamic libraries into a minimal runtime. Scratch does not imply a statically linked executable. |
+| PostgreSQL | Alpine | The official variant provides the native libraries, initialization tools and entrypoint scripts together. A scratch variant would require assembling and maintaining those dependencies ourselves. |
+| Kanidm RADIUS | Upstream openSUSE | Preserve the supported FreeRADIUS installation and its native Kanidm integration module. |
+| Stalwart | Upstream Debian | Preserve its supported native libraries, runtime tooling and file capability for binding low ports. |
+
+This is a compatibility and maintenance decision per application, not a security ranking of distributions. Scratch reduces shipped components where dependencies are easy to enumerate; it also makes us responsible for supplying and updating every required file. Using one base everywhere would require additional porting and integration testing.
+
 | Consideration | `scratch` runtime | Alpine runtime |
 | --- | --- | --- |
 | Shipped components | Exactly the files you add | musl, BusyBox and an APK-managed userland, plus installed packages |
@@ -17,10 +29,10 @@ Docker documents `scratch` as an empty starting point, with the application resp
 
 Alpine supplies musl, BusyBox and a package manager, and builds its userland with PIE and stack protection. Those are useful protections, but the complete application's dependencies and update practices determine the result. Alpine's `main` and `community` repositories have different support windows; check the branch and every required package before choosing one. A small image size or a lower scanner count alone is insufficient evidence of better security. [Alpine design](https://alpinelinux.org/about/) · [Release support](https://alpinelinux.org/releases/)
 
-## What the example implements
+## What this repository implements
 
-- An OBS-provided compiler builds a static Go executable with `CGO_ENABLED=0` and no external modules. Only that executable enters the final image.
-- The image declares numeric UID/GID `65532:65532` and needs no writable files, network, shell, or Linux capabilities to run.
+- The monitoring images copy upstream executables into scratch and validate that they have no ELF interpreter. Required certificates, configuration and licenses are included.
+- Monitoring images and Kanidm declare numeric UID/GID `65532:65532`. Writable storage, network access and capabilities are selected according to each service's needs.
 - A source allowlist keeps local files and credentials out of uploads. OBS signs the resulting image with its managed project key.
 - The verification command requires the pinned key and a matching image identity, rejecting unsigned content.
 
@@ -32,4 +44,4 @@ Host isolation remains necessary: use a non-root runtime, a read-only filesystem
 
 OBS workers are offline. The preparation script downloads the exact upstream image digest before submission, exports the chosen runtime, and generates a scratch-plus-rootfs recipe. For PostgreSQL, RADIUS and Stalwart this rootfs still contains the entire upstream distribution; writing `FROM scratch` in the generated recipe does not make those runtimes minimal or remove their package dependencies.
 
-The signed provenance records the upstream digest and local input/archive hashes. Dependabot updates real Dockerfile image references through PRs, and CI rebuilds and tests the runtime before publication. OBS assembles and signs the final application images; only the hello demonstration is compiled from source within OBS. [OBS Dockerfile build rules](https://openbuildservice.org/help/manuals/obs-user-guide/cha-obs-supported-formats.html)
+The signed provenance records the upstream digest and local input/archive hashes. Dependabot updates real Dockerfile image references through PRs, and CI rebuilds and tests the runtime before publication. OBS assembles and signs the final application images from those pinned upstream binaries. [OBS Dockerfile build rules](https://openbuildservice.org/help/manuals/obs-user-guide/cha-obs-supported-formats.html)

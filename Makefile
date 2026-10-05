@@ -1,5 +1,5 @@
 PYTHON ?= python3
-IMAGE ?= hello
+IMAGE ?= prometheus
 
 .PHONY: check prepare smoke bootstrap publish status log verify
 

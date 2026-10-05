@@ -1,9 +1,4 @@
 {
-  "hello": [
-    "Dockerfile",
-    "go.mod",
-    "main.go"
-  ],
   "kanidm": {
     "prepared": [
       "Dockerfile",
