@@ -32,6 +32,11 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y podman
       - run: python3 scripts/prepare.py "${{ matrix.image }}"
       - run: python3 scripts/smoke.py "${{ matrix.image }}"
+      - name: PostgreSQL runtime diagnostics
+        if: failure() && matrix.image == 'postgresql'
+        run: |
+          sudo podman info --format '{{json .Host.Security}}'
+          sudo dmesg | rg 'apparmor=.*DENIED|seccomp' || true
 
   publish:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'

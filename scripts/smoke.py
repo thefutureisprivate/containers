@@ -75,7 +75,12 @@ def smoke(name):
             # above. Redact it before printing initialization diagnostics.
             log = podman("logs", container, capture=True, merge_stderr=True)
             print(log.replace(password, "[redacted]")[-8000:], flush=True)
-            podman("top", container, "user", "comm", "etime")
+            podman("top", container, "user", "pid", "args", "etime")
+            try:
+                podman("exec", container, "timeout", "5", "psql", "-U", "postgres", "-Atc",
+                       "SELECT pid, wait_event_type, wait_event, state, query FROM pg_stat_activity")
+            except subprocess.CalledProcessError:
+                pass
             raise
         finally:
             podman("rm", "--force", "--volumes", container)
