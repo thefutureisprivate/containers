@@ -30,6 +30,7 @@
 #!RemoteAsset: https://files.pythonhosted.org/packages/63/34/ba1c580383c9eada3711951fef0795c80b829a078d72188184bcab9dd527/packaging-26.3-py3-none-any.whl sha256:d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c packaging-26.3-py3-none-any.whl
 #!RemoteAsset: https://files.pythonhosted.org/packages/74/da/c266478ebea2b8d3176484e06756960d94d27cce2d7dc5ca3be6151cb9e3/phonenumbers-9.0.40-py2.py3-none-any.whl sha256:189c028c4acd41ee80782e50f74a91260bd76d9115c83be94302509e1cdb5e84 phonenumbers-9.0.40-py2.py3-none-any.whl
 #!RemoteAsset: https://files.pythonhosted.org/packages/f0/f4/68c491844841ede6bed70189546b3ee9731cf9f2cbad396faff5e1ccba45/pillow-12.3.0-cp314-cp314-musllinux_1_2_x86_64.whl sha256:23aceaa007d6172b02c277f0cd359c79492bbb14f7072b4ede9fbcaf20648130 pillow-12.3.0-cp314-cp314-musllinux_1_2_x86_64.whl
+#!RemoteAsset: https://files.pythonhosted.org/packages/f3/6e/1736e5b4ae2b778ef2f81c47d797de9f891d4d8acb047a24ca37a60294dd/pip-26.2.1-py3-none-any.whl sha256:71138adf1f4ca900cdb7d289c21b7494329f2332b6d85f0e1c42108c0384ed3e pip-26.2.1-py3-none-any.whl
 #!RemoteAsset: https://files.pythonhosted.org/packages/eb/a3/b69efbf4143b5b9859b977770bbbabcc2796b702fa69dc40271e45cd5a56/prometheus_client-0.26.0-py3-none-any.whl sha256:fa93d06737aa02bacd05794768508bb97d2fbee28cb3bca04eaae92f0ca953d6 prometheus_client-0.26.0-py3-none-any.whl
 #!RemoteAsset: https://files.pythonhosted.org/packages/95/42/aab651bc22bafa961806ca3b21027bb0739a2730b0e6f7f0778baeb95e67/psycopg2_binary-2.9.13-cp314-cp314-musllinux_1_2_x86_64.whl sha256:215777c62ce81c3b487cefdb6a41969944eb982309f91349ff3ca0323d6f17ed psycopg2_binary-2.9.13-cp314-cp314-musllinux_1_2_x86_64.whl
 #!RemoteAsset: https://files.pythonhosted.org/packages/9a/3b/6163796d69c3977d1e4287bea4a6979161cbbdd170ebb430511e8e1999ce/pyasn1-0.6.4-py3-none-any.whl sha256:deda9277cfd454080ec40b207fb6df82206a3a2688735233cdcd8d3d565f088b pyasn1-0.6.4-py3-none-any.whl
@@ -67,7 +68,7 @@
 #!BuildTag: synapse:latest
 #!BuildName: synapse
 # Scheduler declarations; container_policy renders the actual Containerfile.
-FROM registry-1.docker.io/library/python:3.14.8-alpine3.24
+FROM registry-1.docker.io/library/alpine:3.24.0
 RUN obs_pkg_mgr add_repo http://download.opensuse.org/repositories/Alpine:/Latest/main/
 RUN obs_pkg_mgr add_repo http://download.opensuse.org/repositories/Alpine:/Latest/community/
-RUN apk add build-base musl-dev libgcc libstdc++
+RUN apk add python3 python3-dev build-base musl-dev libgcc libstdc++

@@ -1,6 +1,6 @@
 {
   "version": "1.162.0",
-  "base": "registry-1.docker.io/library/python:3.14.8-alpine3.24@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72",
+  "base": "registry-1.docker.io/library/alpine:3.24.0@sha256:a2d49ea686c2adfe3c992e47dc3b5e7fa6e6b5055609400dc2acaeb241c829f4",
   "assets": {
     "annotated_types-0.8.0-py3-none-any.whl": {
       "url": "https://files.pythonhosted.org/packages/99/91/8acff4f5e50511b911bbccb72b8628a49c68ce14148cd9f6431094859a90/annotated_types-0.8.0-py3-none-any.whl",
@@ -129,6 +129,10 @@
     "pillow-12.3.0-cp314-cp314-musllinux_1_2_x86_64.whl": {
       "url": "https://files.pythonhosted.org/packages/f0/f4/68c491844841ede6bed70189546b3ee9731cf9f2cbad396faff5e1ccba45/pillow-12.3.0-cp314-cp314-musllinux_1_2_x86_64.whl",
       "sha256": "23aceaa007d6172b02c277f0cd359c79492bbb14f7072b4ede9fbcaf20648130"
+    },
+    "pip-26.2.1-py3-none-any.whl": {
+      "url": "https://files.pythonhosted.org/packages/f3/6e/1736e5b4ae2b778ef2f81c47d797de9f891d4d8acb047a24ca37a60294dd/pip-26.2.1-py3-none-any.whl",
+      "sha256": "71138adf1f4ca900cdb7d289c21b7494329f2332b6d85f0e1c42108c0384ed3e"
     },
     "prometheus_client-0.26.0-py3-none-any.whl": {
       "url": "https://files.pythonhosted.org/packages/eb/a3/b69efbf4143b5b9859b977770bbbabcc2796b702fa69dc40271e45cd5a56/prometheus_client-0.26.0-py3-none-any.whl",
@@ -267,5 +271,5 @@
       "sha256": "b40ef9b4873afb5d0dec02b8d2dfde1cf18c72337b60c99cb735961e0bac05c0"
     }
   },
-  "requirements_sha256": "2d48c9307e3252bd04aae484b9340c87311f2c5833693a884181cec95beab3e2"
+  "requirements_sha256": "cc8d8440db2c1dabbbbe956295598917ac3bac89b2d134fc68cb287932336f58"
 }

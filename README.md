@@ -67,7 +67,7 @@ python3 scripts/update_sources.py kanidm kanidm-radius
 make check
 ```
 
-The command downloads source inputs, validates versions and updates source SHA256 pins, including the Rust lockfile's crate checksums. Commit the changes to the same PR before merging. It never compiles an application. OBS rejects a changed release watch with stale source pins. Synapse source updates use `python3 scripts/update_sources.py synapse` to refresh its hash-locked musl wheels and the small extension built from source. Run it after a Synapse, Python-base or Python-dependency PR changes. This source-resolution command needs Podman; compilation remains in OBS. OIDC, Redis, URL previews and PostgreSQL support are included.
+The command downloads source inputs, validates versions and updates source SHA256 pins, including the Rust lockfile's crate checksums. Commit the changes to the same PR before merging. It never compiles an application. OBS rejects a changed release watch with stale source pins. Synapse source updates use `python3 scripts/update_sources.py synapse` to refresh its hash-locked musl wheels and the small extension built from source. Run it after a Synapse, Alpine-base or Python-dependency PR changes. This source-resolution command needs Podman; compilation remains in OBS. OIDC, Redis, URL previews and PostgreSQL support are included.
 
 After a merge, package-scoped [GitHub push hooks](docs/webhook.md) ask OBS to fetch `main`. OBS then:
 

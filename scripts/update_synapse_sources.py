@@ -78,18 +78,21 @@ def update():
     directory = ROOT / "containers/synapse"
     requirement = (directory / "requirements.txt").read_text().strip()
     references = list(dict.fromkeys(PIN.findall((directory / "Containerfile").read_text())))
-    if len(references) != 1 or references[0][0] != "registry-1.docker.io/library/python":
-        raise ValueError("Expected the pinned official Alpine Python image")
+    if len(references) != 1 or references[0][0] != "registry-1.docker.io/library/alpine":
+        raise ValueError("Expected the pinned official Alpine image")
     image, tag, digest = references[0]
     base = f"{image}:{tag}@sha256:{digest}"
     work = ROOT / ".build/source-downloads"
     work.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="synapse-", dir=work) as tmp:
         command = shlex.split(os.environ.get("PODMAN_COMMAND", "podman"))
-        subprocess.run(command + ["run", "--rm", "--userns=keep-id", f"--user={os.getuid()}:{os.getgid()}",
-            "--env=HOME=/tmp", "--volume", tmp + ":/downloads:Z", "--entrypoint=python3", base,
-            "-m", "pip", "download", "--only-binary=:all:", "--no-binary=zope-interface", "--dest=/downloads",
-            requirement, "psycopg2-binary", "setuptools", "wheel"], check=True)
+        # Only resolve/download inputs here; OBS builds the application and its
+        # one source-only extension. Map container root to the invoking user.
+        subprocess.run(command + ["run", "--rm", "--userns=keep-id:uid=0,gid=0", "--user=0:0",
+            "--env=HOME=/tmp", "--volume", tmp + ":/downloads:Z", "--entrypoint=sh", base,
+            "-ec", 'apk add --no-cache python3 py3-pip >/dev/null; exec python3 -m pip download '
+            '--only-binary=:all: --no-binary=zope-interface --dest=/downloads "$@"', "sh",
+            requirement, "psycopg2-binary", "setuptools", "wheel", "pip"], check=True)
         write_pins(tmp)
 
 

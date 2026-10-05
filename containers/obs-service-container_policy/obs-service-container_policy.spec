@@ -11,6 +11,7 @@ Source3:        container_policy
 Source4:        container_policy.service
 Source5:        90-container-policy
 BuildRequires:  python3-base
+BuildRequires:  apk-tools
 Requires:       python3-base
 Requires:       podman
 Requires:       build
