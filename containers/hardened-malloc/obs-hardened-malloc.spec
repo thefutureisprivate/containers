@@ -18,22 +18,16 @@ ExclusiveArch:  x86_64
 AutoReqProv:    no
 
 %description
-One OBS build produces reusable glibc and musl allocator libraries and loading
-checks. Container builds copy these artifacts; they never compile the allocator.
+One OBS build produces the reusable musl allocator library and loading check.
+Container builds copy these artifacts; they never compile the allocator.
 
 %prep
 %setup -q -n hardened_malloc-%{version} -a 1
-cp -a . ../hardened-musl
 
 %build
-mkdir -p artifacts/glibc artifacts/musl
+mkdir -p artifacts/musl
 # Avoid a libstdc++ dependency in minimal runtimes. Ordinary C++ new/delete
 # still reach the interposed malloc/free; sized-delete checking is unavailable.
-make %{?_smp_mflags} CONFIG_NATIVE=false CONFIG_CXX_ALLOCATOR=false
-cp out/libhardened_malloc.so artifacts/glibc/
-gcc -O2 -fPIE -pie -Wl,-z,relro,-z,now %{SOURCE2} -ldl -o artifacts/glibc/allocator-check
-env LD_PRELOAD="$PWD/artifacts/glibc/libhardened_malloc.so" artifacts/glibc/allocator-check
-
 # Build a musl compiler sysroot once. Its libc is NOT copied into any image.
 pushd musl-1.2.5
 ./configure --prefix="$PWD/sysroot" --syslibdir="$PWD/sysroot/lib"
@@ -41,16 +35,15 @@ make %{?_smp_mflags}
 make install
 popd
 musl_cc="$PWD/musl-1.2.5/sysroot/bin/musl-gcc"
-make -C ../hardened-musl %{?_smp_mflags} CC="$musl_cc" CONFIG_NATIVE=false CONFIG_CXX_ALLOCATOR=false
-cp ../hardened-musl/out/libhardened_malloc.so artifacts/musl/
+make %{?_smp_mflags} CC="$musl_cc" CONFIG_NATIVE=false CONFIG_CXX_ALLOCATOR=false
+cp out/libhardened_malloc.so artifacts/musl/
 "$musl_cc" -O2 -fPIE -pie -Wl,-z,relro,-z,now -Wl,--dynamic-linker=/lib/ld-musl-x86_64.so.1 %{SOURCE2} -ldl -o artifacts/musl/allocator-check
 env LD_PRELOAD="$PWD/artifacts/musl/libhardened_malloc.so" musl-1.2.5/sysroot/lib/libc.so artifacts/musl/allocator-check
-strip artifacts/glibc/* artifacts/musl/*
-python3 %{SOURCE3} artifacts %{version} %{SOURCE0} %{SOURCE1}
+strip artifacts/musl/*
+python3 %{SOURCE3} artifacts %{version} %{SOURCE0} %{SOURCE1} %{SOURCE2} %{SOURCE3} %{_sourcedir}/obs-hardened-malloc.spec
 cp LICENSE artifacts/LICENSE
 
 %check
-env LD_PRELOAD="$PWD/artifacts/glibc/libhardened_malloc.so" artifacts/glibc/allocator-check
 env LD_PRELOAD="$PWD/artifacts/musl/libhardened_malloc.so" musl-1.2.5/sysroot/lib/libc.so artifacts/musl/allocator-check
 
 %install
@@ -62,4 +55,4 @@ cp -a artifacts/. %{buildroot}%{_libdir}/obs-hardened-malloc/
 
 %changelog
 * Mon Oct 05 2026 Containers maintainers <noreply@github.com> - 2026100200
-- Build shared, non-native musl and glibc artifacts in OBS.
+- Build one shared, non-native musl artifact in OBS for every Alpine runtime.

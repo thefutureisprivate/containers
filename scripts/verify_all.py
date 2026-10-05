@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -52,6 +53,21 @@ def verify_runtime(directory, name, commit):
         for key, value in expected_provenance(name, commit).items():
             if actual.get(key) != value:
                 raise ValueError(f"{name}: signed provenance differs from this Git checkout ({key})")
+        if images()[name]["allocator"] == "musl":
+            directory = obs.ROOT / "containers/hardened-malloc"
+            spec = (directory / "obs-hardened-malloc.spec").read_text()
+            pins = re.findall(r"^#!RemoteAsset: \S+ sha256:([0-9a-f]{64})$", spec, re.M)
+            expected = {
+                "builder": "Open Build Service",
+                "version": re.search(r"^Version:\s+(\S+)", spec, re.M)[1],
+                "source_sha256": pins[0], "musl_headers_sha256": pins[1],
+                "configuration": {"variant": "default", "native": False, "cxx_allocator": False},
+                "recipe_sha256": {f: hashlib.sha256((directory / f).read_bytes()).hexdigest()
+                                  for f in ("allocator-check.c", "manifest.py", "obs-hardened-malloc.spec")},
+            }
+            for key, value in expected.items():
+                if actual["allocator"]["build"].get(key) != value:
+                    raise ValueError(f"{name}: shared allocator provenance differs from Git ({key})")
     finally:
         podman("rm", container)
 

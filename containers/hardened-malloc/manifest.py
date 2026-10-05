@@ -12,7 +12,8 @@ manifest = {
     "source_sha256": digest(sys.argv[3]),
     "musl_headers_sha256": digest(sys.argv[4]),
     "configuration": {"variant": "default", "native": False, "cxx_allocator": False},
+    "recipe_sha256": {Path(p).name: digest(p) for p in sys.argv[5:]},
     "artifacts": {libc: {p.name: digest(p) for p in (directory / libc).iterdir()}
-                  for libc in ("glibc", "musl")},
+                  for libc in ("musl",)},
 }
 (directory / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")

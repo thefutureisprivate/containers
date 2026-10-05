@@ -12,12 +12,14 @@ import struct
 import subprocess
 import tarfile
 import tempfile
+import tomllib
+import urllib.parse
 import xml.etree.ElementTree as ET
 import zipfile
 
 CATALOG = Path(__file__).with_name("images.json")
 PIN = re.compile(r"^FROM ([a-z0-9./_-]+):([A-Za-z0-9_.-]+)@sha256:([0-9a-f]{64})(?: AS [a-z][a-z0-9_-]*)?$", re.M)
-ASSET = re.compile(r"^#!RemoteAsset: (https://github.com/[A-Za-z0-9_./-]+) sha256:([0-9a-f]{64}) ([A-Za-z0-9][A-Za-z0-9_.-]*)$", re.M)
+ASSET = re.compile(r"^#!RemoteAsset: (https://(?:github.com|static.crates.io)/[A-Za-z0-9_./%+-]+) sha256:([0-9a-f]{64}) ([A-Za-z0-9][A-Za-z0-9_.+-]*)$", re.M)
 INPUT_FILES = ("Containerfile", "LICENSE", "NOTICE", "enable-webui.py", "nginx.conf",
                "default.conf", "entrypoint.sh", "src/go.mod", "src/go.sum", "src/tools.go",
                "_service", "source-lock.json", "upstream/Dockerfile", "requirements.txt",
@@ -245,6 +247,55 @@ def prepare_allocator(name, outdir):
             "coverage": images()[name].get("allocator_note", "Dynamically linked native malloc allocations")}
 
 
+def crate_assets(lock):
+    result = {}
+    for package in lock["package"]:
+        if "source" not in package:
+            continue
+        if package["source"] != "registry+https://github.com/rust-lang/crates.io-index":
+            raise ValueError("Rust source contains an unreviewed non-crates.io dependency")
+        name, version, checksum = package["name"], package["version"], package["checksum"]
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", name) or not re.fullmatch(r"[A-Za-z0-9_.+-]+", version):
+            raise ValueError("Invalid crate name/version")
+        if not re.fullmatch(r"[0-9a-f]{64}", checksum):
+            raise ValueError("Rust dependency has no SHA256 checksum")
+        filename = f"crate-{name}-{version}.crate"
+        url = f"https://static.crates.io/crates/{name}/{name}-{urllib.parse.quote(version, safe='')}.crate"
+        result[filename] = {"url": url, "sha256": checksum}
+    return result
+
+
+def prepare_rust_sources(directory, outdir, declared):
+    """Vendor checksum-pinned crates fetched by OBS; never execute source hooks."""
+    with tarfile.open(directory / "upstream.tar.gz") as source:
+        candidates = [m for m in source if m.name.count("/") == 1 and m.name.endswith("/Cargo.lock")]
+        if len(candidates) != 1:
+            raise ValueError("Expected one upstream Cargo.lock")
+        lock = tomllib.loads(source.extractfile(candidates[0]).read().decode())
+    expected = crate_assets(lock)
+    actual = {k: v for k, v in declared.items() if k.startswith("crate-")}
+    if actual != expected:
+        raise ValueError("OBS crate inputs differ from the release's Cargo.lock")
+    with tempfile.TemporaryDirectory(prefix="obs-cargo-vendor-") as tmp:
+        vendor = Path(tmp) / "vendor"
+        vendor.mkdir()
+        for filename, pin in expected.items():
+            root = filename.removeprefix("crate-").removesuffix(".crate")
+            with tarfile.open(directory / filename) as crate:
+                for member in crate:
+                    if member.name.split("/", 1)[0] != root:
+                        raise ValueError("Crate archive has an unexpected root directory")
+                crate.extractall(vendor, filter="data")
+            target = vendor / root
+            checksums = {str(p.relative_to(target)): hashlib.sha256(p.read_bytes()).hexdigest()
+                         for p in sorted(target.rglob("*")) if p.is_file() and p.name != ".cargo-checksum.json"}
+            (target / ".cargo-checksum.json").write_text(json.dumps({"package": pin["sha256"], "files": checksums}))
+        path = outdir / "vendor.tar.gz"
+        with tarfile.open(path, "w:gz") as output:
+            output.add(vendor, arcname="vendor")
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def archive_config(archive):
     manifest = json.load(archive.extractfile("manifest.json"))
     if len(manifest) != 1:
@@ -318,7 +369,9 @@ def prepare_build(name, outdir):
     outdir.mkdir(parents=True, exist_ok=True)
     allocator = prepare_allocator(name, outdir)
     generated = {}
-    if name in ("certspotter", "kanidm", "kanidm-radius", "matrix-authentication-service"):
+    if name in ("kanidm", "kanidm-radius", "matrix-authentication-service"):
+        generated["vendor.tar.gz"] = prepare_rust_sources(directory, outdir, remote_assets)
+    if name == "certspotter":
         vendor_name = "vendor.tar.gz"
         candidates = list(directory.glob("*" + vendor_name))
         if len(candidates) != 1:

@@ -26,7 +26,11 @@ def prepare(output):
     user, _ = obs.credentials(credential_file)
     tokens = ET.fromstring(client.request("GET", f"/person/{user}/token"))
     hooks = []
-    for name in obs.source_packages():
+    # GitHub permits at most 20 repository webhooks per event. Keep one scoped
+    # hook per application; maintainers refresh shared tooling with make refresh.
+    if len(obs.package_manifest()) > 20:
+        raise ValueError("Application hooks exceed GitHub's per-event limit")
+    for name in obs.package_manifest():
         description = "Containers Git refresh: " + name
         existing = next((e for e in tokens if e.get("description") == description
                          and e.get("project") == obs.project() and e.get("package") == name
