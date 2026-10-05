@@ -37,9 +37,8 @@ def wait_for_command(container, *command):
     raise ValueError("Container initialization/readiness failed: " + failure)
 
 
-def smoke(name, image=None):
+def smoke(name, image):
     spec = images()[name]
-    image = image or f"localhost/obs-prepared/{name}:test"
     info = json.loads(podman("image", "inspect", image, capture=True))[0]
     audit_runtime(name, runtime_config(info), spec)
     common = ["--pull=never", "--network=none", "--read-only", "--cap-drop=ALL",
@@ -122,7 +121,7 @@ def smoke(name, image=None):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("packages", nargs="*", choices=list(images()) + ["all"])
+    parser.add_argument("package", choices=list(images()))
+    parser.add_argument("image", help="Already loaded, verified image ID")
     args = parser.parse_args()
-    for name in (list(images()) if not args.packages or "all" in args.packages else args.packages):
-        smoke(name)
+    smoke(args.package, args.image)

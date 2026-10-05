@@ -10,6 +10,7 @@ Source2:        images.json
 Source3:        container_policy
 Source4:        container_policy.service
 Source5:        90-container-policy
+BuildRequires:  python3-base
 Requires:       python3-base
 Requires:       podman
 Requires:       build
@@ -38,6 +39,7 @@ install -m 0755 %{SOURCE5} %{buildroot}/usr/lib/build/post-build-checks/
 /usr/lib/obs/service/container_policy
 /usr/lib/obs/service/container_policy.service
 /usr/lib/obs/container-policy/
+%dir /usr/lib/build/post-build-checks
 /usr/lib/build/post-build-checks/90-container-policy
 
 %changelog
