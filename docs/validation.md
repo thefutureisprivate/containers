@@ -1,6 +1,65 @@
 # Application image validation
 
-The records below describe the previous preparation/upload pipeline. The native OBS migration is being validated in the unpublished `home:thefutureisprivate:containers:staging` project. They are retained as historical evidence, not proof of the replacement pipeline.
+## Native OBS pipeline and bundled Web UI — 2026-10-05
+
+All nine images were assembled, hardened, tested, signed and published by
+`home:thefutureisprivate:containers`. The application binaries remain pinned
+upstream inputs; this pipeline does not recompile the applications from source.
+GitHub has no image build workflows. All ten package-scoped push webhooks returned
+HTTP 200, and OBS fetched the pushed Git revisions itself.
+
+The validated repository implementation is `8f4d2bc534c6224a29062d3728774dc3fbb434ed`.
+Stalwart's recipe and enable command are from
+`58be9d356e86c36ca9c6c59b8055511d3296433b`. The policy helper and its rebuild marker
+were built by OBS as `1.0-3.1`. The marker is present in each container's rebuild
+metadata, so changes to shared checks can trigger new container builds.
+
+All **20 local unit tests** passed. All nine **OBS runtime checks and smoke tests**
+passed. Every runtime has an explicit nonzero UID:GID; scans of each effective
+filesystem found no setuid/setgid files or file capabilities. Running service
+processes were checked with all capabilities dropped, no-new-privileges, a
+read-only root filesystem and networking disabled. The tests exercised monitoring
+startup/configuration, Stalwart fresh-volume readiness, and PostgreSQL fresh
+initialization followed by `SELECT 42` over TCP. Kanidm and RADIUS checks cover
+binary execution, not live identity/RADIUS integration.
+
+Stalwart embeds official Web UI v1.0.11. OBS fetched the ZIP through the SCM
+bridge, verified its pinned SHA-256 and embedded it as a read-only file. A
+separate disposable configured Stalwart instance successfully ran the enable
+command's API logic twice, served `/admin/` and `/account/`, and returned JavaScript
+identical to the pinned ZIP with container networking disabled. The image remains
+Alpine and defaults to `2000:2000`. First-time bootstrap retains its upstream
+GitHub download requirement; see [the enable command and limitations](stalwart-webui.md).
+
+After OBS reported publication, `scripts/verify_all.py` completed for all nine
+releases. Skopeo enforced the pinned OBS signing key and matching image identity;
+the verifier then compared Git revisions, recipe hashes, policy hashes and UI
+asset provenance, checked runtime UID:GID, and audited the signed image's merged
+filesystem. No application container was built locally during this verification.
+
+| Signed image release | Verified manifest digest |
+| --- | --- |
+| `alertmanager:0.34.1-2.2` | `sha256:66bec9a57c9cc1cee1377b9a250bba1e874536f2128fc8f8e2c94a9e68634bdb` |
+| `blackbox-exporter:0.28.0-2.2` | `sha256:6fdaaa674f2d2d96c802ab8643a8466c5d5882cdfb37668a6f49cb9b15fdec5a` |
+| `kanidm:1.11.2-2.2` | `sha256:e5c7127a907709313859405d17293bb4b4e8db04cafb32bda393341955a60bf1` |
+| `kanidm-radius:1.11.2-3.2` | `sha256:b3c76a50a630375490d4dcb71ed68df50cfe794296d2eead8ecd9fb6d099948a` |
+| `node-exporter:1.12.1-2.2` | `sha256:a6f070ab96e4c110e9c85648c7bbbc198079285f96b709f7c20c7eafac7fa379` |
+| `postgres-exporter:0.20.1-2.2` | `sha256:e2f7b2b0ba02e9d1b9b10913f7b710cc5d2acc641a0dcb16d5b76d135f0aee50` |
+| `postgresql:18.6-alpine3.24-3.2` | `sha256:6cd36300de10ce0beeedbef36d8bf9eaf675e1db3d778477b98c205e0db864e7` |
+| `prometheus:3.15.0-2.2` | `sha256:b8fed27bcb26cbb3ea47559a9a5de6650c18499cdaca040638ecd0046e070478` |
+| `stalwart:0.16.24-alpine-4.2` | `sha256:0eb7a04d79494789d1b0c3d0481ccf9ae45f5f2e568f04349041e3d7d967a5de` |
+
+The registry prefix is
+`registry.opensuse.org/home/thefutureisprivate/containers/containers/`.
+The pinned OBS signing-key fingerprint remains
+`DD87A6E5C1750F5565E2BFF04B95B6E079AF43C2`.
+Full local verification output is retained in `.build/native-verification.log`
+(ignored by Git). The unpublished staging project also passed the native build
+checks before production migration.
+
+## Historical preparation/upload pipeline
+
+The older records below are historical evidence for the retired pipeline.
 
 ## Unprivileged runtimes — 2026-10-05
 
@@ -40,4 +99,4 @@ The full registry prefix is `registry.opensuse.org/home/thefutureisprivate/conta
 
 Local checks passed: immutable input validation, static ELF checks for the five monitoring runtimes, binary execution for all nine images, monitoring service startup, Prometheus/Alertmanager configuration validation, and PostgreSQL initialization plus `SELECT 42`. Kanidm RADIUS tests cover both FreeRADIUS and the native `kanidm_radiusd` wrapper. Identity authentication, RADIUS clients, real email delivery and database migration tests need deployment configuration and are outside this initial image validation.
 
-GitHub's Docker and GitHub Actions Dependabot scans both completed successfully after the first push. The current inputs were already up to date, so that scan did not open an update PR. Future upstream tag/digest changes are checked daily. That earlier publication workflow used an `OBS_CREDENTIALS` Actions secret. It has been removed; native OBS Git synchronization replaces it.
+GitHub's Docker and GitHub Actions Dependabot scans both completed successfully after the first push. The current inputs were already up to date, so that scan did not open an update PR. Future upstream tag/digest changes are checked daily. That earlier publication workflow used an `OBS_CREDENTIALS` Actions secret. That workflow has been removed; native OBS Git synchronization replaces it. The obsolete account secret is no longer used.

@@ -41,7 +41,7 @@ GitHub stores the recipes and update PRs. **There are no GitHub Actions build, t
 
 OBS performs the complete image pipeline:
 
-1. Fetch each package's Git directory and import the nine versioned upstream images using OBS's `Docker:Registry` service.
+1. Fetch each package's Git directory, download the pinned Stalwart UI asset, and import the nine versioned upstream images using OBS's `Docker:Registry` service.
 2. Build the policy helper RPM in the `tooling` repository. Each container depends on this helper.
 3. Inside the isolated OBS build VM, check the imported registry digest, image configuration hash and every layer against the pin. A mismatch fails the build.
 4. Build the complete Containerfile with Podman, applying file hardening and the numeric non-root user. The build uses the imported image with `--pull=never`.

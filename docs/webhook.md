@@ -4,6 +4,10 @@ Dependabot opens update PRs. Merging a PR changes `main`; GitHub sends a push no
 
 Each of the nine application packages and the build-policy package gets its own OBS `runservice` token and GitHub webhook. Tokens are bound to the exact OBS project and package. This avoids an account-wide token and works with OBS's package Git synchronization.
 
+All ten hooks were installed on 2026-10-05. Their push deliveries returned HTTP
+200, and OBS fetched the pushed Git revisions. No account-wide refresh token was
+created. The setup commands below are for replacement or recovery.
+
 After `make configure`, prepare the hooks using credentials outside this repository:
 
 ```sh

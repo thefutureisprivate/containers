@@ -30,6 +30,7 @@ def prepare(output):
         description = "Containers Git refresh: " + name
         existing = next((e for e in tokens if e.get("description") == description
                          and e.get("project") == obs.project() and e.get("package") == name
+                         and e.get("kind") == "runservice"
                          and e.get("enabled") == "true"), None)
         if existing is not None:
             token_id, secret = existing.get("id"), existing.get("string")
