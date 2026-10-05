@@ -2,9 +2,9 @@
 
 A merged PR changes `main`; a GitHub push hook requests a package refresh, and OBS fetches `main` from Git. The notification neither uploads layers nor runs a GitHub build.
 
-The expanded catalog needs 20 application hooks. Each uses a `runservice` token bound to its exact OBS project and package. GitHub limits repository hooks to 20 for each event, so the allocator and policy helper use explicit `make refresh` after changes. No account-wide token is used. [GitHub webhook limits](https://docs.github.com/en/webhooks/testing-and-troubleshooting-webhooks/troubleshooting-webhooks)
+The catalog has 20 application hooks. Each uses a `runservice` token bound to its exact OBS project and package. GitHub limits repository hooks to 20 for each event, so the allocator and policy helper use explicit `make refresh` after changes. No account-wide token is used. [GitHub webhook limits](https://docs.github.com/en/webhooks/testing-and-troubleshooting-webhooks/troubleshooting-webhooks)
 
-The original nine application hooks and helper hook were installed and verified on 2026-10-05. Expansion requires removing the old helper hook before installing the full application set; validation records will record completion.
+All 20 application hooks were installed on 2026-10-05 and their active push-only settings were checked through GitHub's API. The original nine application hooks were retained and the old shared-policy hook was removed to stay within GitHub's limit.
 
 After `make configure`, prepare a new private configuration outside Git:
 
