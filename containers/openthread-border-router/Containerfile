@@ -2,11 +2,11 @@
 FROM registry-1.docker.io/library/alpine:3.24.0@sha256:a2d49ea686c2adfe3c992e47dc3b5e7fa6e6b5055609400dc2acaeb241c829f4 AS builder
 # apk 3 uses a plain absolute path for an offline file repository.
 RUN sed -i 's|^file:||' /etc/apkrepos_obs_dockersupport
-RUN apk add build-base musl-dev cmake ninja-build linux-headers jsoncpp-dev libmnl-dev libnftnl-dev pkgconf
+RUN apk add build-base musl-dev cmake linux-headers jsoncpp-dev libmnl-dev libnftnl-dev pkgconf
 WORKDIR /src
 COPY upstream.tar.gz /tmp/
 RUN tar -xzf /tmp/upstream.tar.gz -C /src --strip-components=1
-RUN cmake -S . -B build -G Ninja -DBUILD_TESTING=OFF -DENABLE_CJSON_TEST=OFF \
+RUN cmake -S . -B build -DBUILD_TESTING=OFF -DENABLE_CJSON_TEST=OFF \
       -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
       -DCMAKE_INSTALL_PREFIX=/usr -DOTBR_DBUS=OFF -DOTBR_MDNS=openthread \
       -DOTBR_REST=ON -DOTBR_WEB=OFF -DOT_POSIX_NAT64_CIDR=192.168.255.0/24 -DOT_FIREWALL=ON \

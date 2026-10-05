@@ -5,4 +5,4 @@
 FROM registry-1.docker.io/library/alpine:3.24.0
 RUN obs_pkg_mgr add_repo http://download.opensuse.org/repositories/Alpine:/Latest/main/
 RUN obs_pkg_mgr add_repo http://download.opensuse.org/repositories/Alpine:/Latest/community/
-RUN apk add build-base musl-dev cmake ninja-build linux-headers jsoncpp-dev libmnl-dev libnftnl-dev pkgconf ca-certificates libstdc++ jsoncpp libmnl libnftnl iproute2 iptables ipset
+RUN apk add build-base musl-dev cmake linux-headers jsoncpp-dev libmnl-dev libnftnl-dev pkgconf ca-certificates libstdc++ jsoncpp libmnl libnftnl iproute2 iptables ipset
