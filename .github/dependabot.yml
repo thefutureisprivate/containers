@@ -23,9 +23,3 @@ updates:
           - "docker.io/kanidm/*"
     commit-message:
       prefix: "Update container"
-  - package-ecosystem: github-actions
-    directory: /
-    schedule:
-      interval: weekly
-    commit-message:
-      prefix: "Update CI"
