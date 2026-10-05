@@ -45,6 +45,10 @@ install -m 0755 %{SOURCE3} %{buildroot}/usr/lib/obs/service/
 install -m 0644 %{SOURCE4} %{buildroot}/usr/lib/obs/service/
 install -m 0755 %{SOURCE5} %{buildroot}/usr/lib/build/post-build-checks/
 install -D -m 0644 revision.sha256 %{buildroot}/usr/share/obs-container-policy/revision.sha256
+# obs-build checks /sbin/apk, but openSUSE packages apk in /usr/bin.
+# This build-VM alias enables obs-build's native offline APK index generation.
+install -d %{buildroot}%{_sbindir}
+ln -s ../bin/apk %{buildroot}%{_sbindir}/apk
 
 %files
 %dir /usr/lib/obs
@@ -54,6 +58,7 @@ install -D -m 0644 revision.sha256 %{buildroot}/usr/share/obs-container-policy/r
 /usr/lib/obs/container-policy/
 %dir /usr/lib/build/post-build-checks
 /usr/lib/build/post-build-checks/90-container-policy
+%{_sbindir}/apk
 
 %files -n obs-container-policy-revision
 %dir /usr/share/obs-container-policy
