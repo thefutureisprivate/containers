@@ -1,7 +1,10 @@
 import hashlib
+import gzip
 import importlib.util
 import io
 import json
+import shutil
+import subprocess
 from pathlib import Path
 import tarfile
 import tempfile
@@ -15,6 +18,20 @@ SPEC.loader.exec_module(policy)
 
 
 class PolicyTests(unittest.TestCase):
+    def test_raw_and_gzip_layers_have_the_same_uncompressed_digest(self):
+        data = b"a layer's uncompressed bytes" * 100
+        expected = "sha256:" + hashlib.sha256(data).hexdigest()
+        for value in (data, gzip.compress(data)):
+            self.assertEqual(policy.layer_digest(io.BytesIO(value)), expected)
+
+    @unittest.skipUnless(shutil.which("zstd"), "zstd decoder is required by the OBS helper RPM")
+    def test_zstd_layers_preserve_digest_and_reject_corruption(self):
+        data = b"a layer's uncompressed bytes" * 100
+        compressed = subprocess.check_output(["zstd", "--compress", "--stdout"], input=data)
+        self.assertEqual(policy.layer_digest(io.BytesIO(compressed)), "sha256:" + hashlib.sha256(data).hexdigest())
+        with self.assertRaisesRegex(ValueError, "Invalid zstd"):
+            policy.layer_digest(io.BytesIO(compressed[:8]))
+
     def fixture(self, directory, *, bad_config=False, bad_layer=False, onbuild=False):
         layer = b"fixture layer bytes"
         config = json.dumps({"architecture": "amd64", "os": "linux",

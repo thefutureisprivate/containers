@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import re
 import shlex
+import shutil
 import struct
 import subprocess
 import tarfile
@@ -129,6 +130,26 @@ def archive_config(archive):
     return entry, json.loads(config_bytes), config_id
 
 
+def layer_digest(stream):
+    magic = stream.read(4)
+    stream.seek(0)
+    if magic[:2] == b"\x1f\x8b":
+        stream = gzip.GzipFile(fileobj=stream)
+    elif magic == b"\x28\xb5\x2f\xfd":
+        # OBS retains compressed registry blobs in its Docker archive. Python
+        # 3.13 has no stdlib zstd reader; use the build VM's packaged decoder.
+        with tempfile.TemporaryFile() as compressed:
+            shutil.copyfileobj(stream, compressed)
+            compressed.seek(0)
+            with subprocess.Popen(["zstd", "--decompress", "--stdout"], stdin=compressed,
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE) as decoder:
+                result = hashlib.file_digest(decoder.stdout, "sha256").hexdigest()
+                if decoder.wait() != 0:
+                    raise ValueError("Invalid zstd image layer")
+        return "sha256:" + result
+    return "sha256:" + hashlib.file_digest(stream, "sha256").hexdigest()
+
+
 def verify_import(directory, reference):
     """Tie OBS's verified registry digest to the config and every unpacked layer."""
     directory = Path(directory)
@@ -156,13 +177,9 @@ def verify_import(directory, reference):
             raise ValueError("Upstream layer count differs from pinned config")
         for filename, diff_id in zip(entry["Layers"], diff_ids):
             stream = archive.extractfile(filename)
-            magic = stream.read(2)
-            stream.seek(0)
-            if magic == b"\x1f\x8b":
-                stream = gzip.GzipFile(fileobj=stream)
-            actual = "sha256:" + hashlib.file_digest(stream, "sha256").hexdigest()
+            actual = layer_digest(stream)
             if actual != diff_id:
-                raise ValueError("Imported layer does not match pinned config")
+                raise ValueError(f"Imported layer does not match pinned config: {filename}: {actual} != {diff_id}")
     print(f"Verified OBS registry import: {reference}", flush=True)
     return config_id
 

@@ -14,6 +14,7 @@ BuildRequires:  python3-base
 Requires:       python3-base
 Requires:       podman
 Requires:       build
+Requires:       zstd
 BuildArch:      noarch
 
 %description

@@ -23,7 +23,9 @@ def wait_for_command(container, *command):
     failure = ""
     for _ in range(60):
         try:
-            return podman("exec", container, *command, capture=True, merge_stderr=True, timeout=5)
+            # Keep the SQL/readiness output separate from OBS wrapper notices
+            # written to stderr (for example "Unsharing environment").
+            return podman("exec", container, *command, capture=True, timeout=5)
         except subprocess.CalledProcessError as error:
             failure = (error.stdout or "").strip()[-1000:]
             state = json.loads(podman("inspect", "--format={{json .State}}", container, capture=True))
