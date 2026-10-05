@@ -6,7 +6,8 @@ RUN apk add build-base musl-dev cmake ninja-build linux-headers jsoncpp-dev libm
 WORKDIR /src
 COPY upstream.tar.gz /tmp/
 RUN tar -xzf /tmp/upstream.tar.gz -C /src --strip-components=1
-RUN cmake -S . -B build -G Ninja -DBUILD_TESTING=OFF -DCMAKE_BUILD_TYPE=Release \
+RUN cmake -S . -B build -G Ninja -DBUILD_TESTING=OFF -DENABLE_CJSON_TEST=OFF \
+      -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
       -DCMAKE_INSTALL_PREFIX=/usr -DOTBR_DBUS=OFF -DOTBR_MDNS=openthread \
       -DOTBR_REST=ON -DOTBR_WEB=OFF -DOT_POSIX_NAT64_CIDR=192.168.255.0/24 -DOT_FIREWALL=ON \
     && cmake --build build --parallel 2 && DESTDIR=/out cmake --install build
