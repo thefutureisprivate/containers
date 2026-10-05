@@ -14,20 +14,21 @@ import xml.etree.ElementTree as ET
 import obs
 
 sys.path.insert(0, str(obs.ROOT / "containers/obs-service-container_policy"))
-from policy import archive_config, audit_rootfs, audit_runtime, images, podman, recipe
+from policy import INPUT_FILES, archive_config, assets, audit_rootfs, audit_runtime, images, podman, recipe
 
 
 def expected_provenance(name, commit):
     directory = obs.ROOT / "containers" / name
-    _, reference, _ = recipe(directory)
+    content, reference, _ = recipe(directory)
     inputs = {filename: hashlib.sha256((directory / filename).read_bytes()).hexdigest()
-              for filename in ("Containerfile", "LICENSE", "NOTICE") if (directory / filename).is_file()}
+              for filename in INPUT_FILES if (directory / filename).is_file()}
     policy_dir = obs.ROOT / "containers/obs-service-container_policy"
     policy_hashes = {filename: hashlib.sha256((policy_dir / filename).read_bytes()).hexdigest()
                      for filename in ("policy.py", "smoke.py", "images.json")}
     return {"builder": "Open Build Service", "package": name, "upstream": reference,
             "platform": "linux/amd64", "git_commit": commit,
             "inputs_sha256": inputs, "policy_sha256": policy_hashes,
+            "assets": assets(content),
             "runtime_user": images()[name]["user"]}
 
 

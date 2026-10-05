@@ -1,9 +1,13 @@
 """Smoke-test the image built by OBS before it can be published."""
 import argparse
+import importlib.util
 import json
+from pathlib import Path
+import re
 import secrets
 import subprocess
 import time
+import zipfile
 
 from policy import audit_runtime, images, podman, runtime_config
 
@@ -36,6 +40,64 @@ def wait_for_command(container, *command):
             failure = "readiness command exceeded five seconds"
     # Bootstrap logs may contain generated credentials. Do not print them.
     raise ValueError("Container initialization/readiness failed: " + failure)
+
+
+def stalwart_ui(image, common):
+    """Exercise the real management API and serve the pinned UI without a network."""
+    sources = Path("/usr/src/packages/SOURCES")
+    spec = importlib.util.spec_from_file_location("enable_webui", sources / "enable-webui.py")
+    helper = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(helper)
+    password = secrets.token_hex(24)
+    config = json.dumps({"@type": "RocksDb", "path": "/var/lib/stalwart/ui-test",
+                         "cacheSize": 8388608, "bufferSize": 8388608})
+    container = podman("run", "--detach", *common,
+                       "--env", "STALWART_RECOVERY_MODE=1",
+                       "--env", "STALWART_RECOVERY_ADMIN=admin:" + password,
+                       "--entrypoint=sh", image, "-ec",
+                       'printf "%s" "$1" > /etc/stalwart/config.json; '
+                       'exec /usr/local/bin/stalwart --config /etc/stalwart/config.json',
+                       "sh", config, capture=True).strip()
+    try:
+        wait_for_command(container, "curl", "--fail", "--silent", "--output", "/dev/null",
+                         "http://127.0.0.1:8080/healthz/live")
+
+        def call(method, arguments):
+            data = json.dumps(helper.envelope(method, arguments))
+            # Pass the disposable test password through stdin, not an exception's argv.
+            curl_config = ('url = "http://127.0.0.1:8080/jmap"\n'
+                           f'user = "admin:{password}"\n'
+                           'header = "Content-Type: application/json"\n'
+                           f'data = {json.dumps(data)}\n')
+            output = podman("exec", "-i", container, "curl", "--fail", "--silent", "--config", "-",
+                            input_text=curl_config, capture=True, timeout=90)
+            return helper.result(json.loads(output), method)
+
+        helper.enable(call)
+        # Exercise an unchanged second invocation too: it must refresh the cache.
+        helper.enable(call)
+        with zipfile.ZipFile(sources / "webui.zip") as bundle:
+            for prefix in ("admin", "account"):
+                html = podman("exec", container, "curl", "--fail", "--silent",
+                              f"http://127.0.0.1:8080/{prefix}/index.html", capture=True)
+                if f'<base href="/{prefix}/"' not in html:
+                    raise ValueError("Stalwart did not mount the bundled UI")
+                scripts = re.findall(r'<script[^>]+src="\./(assets/[^"<>]+\.js)"', html)
+                if not scripts:
+                    raise ValueError("Web UI HTML has no JavaScript entry point")
+                for asset in scripts:
+                    actual = podman("exec", container, "curl", "--fail", "--silent",
+                                    f"http://127.0.0.1:8080/{prefix}/{asset}", capture=True)
+                    if actual != bundle.read(asset).decode():
+                        raise ValueError("Served Web UI JavaScript differs from the pinned bundle")
+        audit_processes(container)
+        print("Bundled Stalwart UI passed: management API, /admin, /account, exact JavaScript, network disabled", flush=True)
+    except Exception:
+        log = podman("logs", container, capture=True, merge_stderr=True)
+        print(log.replace(password, "[redacted]")[-4000:], flush=True)
+        raise
+    finally:
+        podman("rm", "--force", "--volumes", container)
 
 
 def smoke(name, image):
@@ -96,6 +158,7 @@ def smoke(name, image):
             audit_processes(container)
         finally:
             podman("rm", "--force", "--volumes", container)
+        stalwart_ui(image, common)
     elif name in ("prometheus", "alertmanager", "blackbox-exporter", "postgres-exporter", "node-exporter"):
         flags = common.copy()
         if name in ("prometheus", "alertmanager"):

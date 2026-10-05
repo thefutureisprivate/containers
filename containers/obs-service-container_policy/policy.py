@@ -13,9 +13,35 @@ import subprocess
 import tarfile
 import tempfile
 import xml.etree.ElementTree as ET
+import zipfile
 
 CATALOG = Path(__file__).with_name("images.json")
 PIN = re.compile(r"^FROM ([a-z0-9./_-]+):([A-Za-z0-9_.-]+)@sha256:([0-9a-f]{64})(?: AS upstream)?$", re.M)
+ASSET = re.compile(r"^#!RemoteAsset: (https://github.com/stalwartlabs/webui/releases/download/v\d+\.\d+\.\d+/webui.zip) sha256:([0-9a-f]{64}) webui.zip$", re.M)
+INPUT_FILES = ("Containerfile", "LICENSE", "NOTICE", "enable-webui.py")
+
+
+def assets(content):
+    declarations = [line for line in content.splitlines() if line.startswith("#!RemoteAsset")]
+    matches = ASSET.findall(content)
+    if len(declarations) != len(matches) or len(matches) > 1:
+        raise ValueError("Remote assets must be a release-and-SHA256-pinned Stalwart Web UI bundle")
+    return {"webui.zip": {"url": url, "sha256": digest} for url, digest in matches}
+
+
+def verify_assets(directory, content):
+    result = assets(content)
+    for filename, expected in result.items():
+        path = Path(directory) / filename
+        if hashlib.sha256(path.read_bytes()).hexdigest() != expected["sha256"]:
+            raise ValueError(f"Remote asset checksum mismatch: {filename}")
+        with zipfile.ZipFile(path) as archive:
+            names = archive.namelist()
+            if "index.html" not in names or not any(n.endswith(".js") for n in names):
+                raise ValueError("Web UI bundle has no index or JavaScript")
+            if archive.testzip() is not None:
+                raise ValueError("Web UI archive is corrupt")
+    return result
 
 
 def images():
@@ -47,12 +73,17 @@ def check_recipe(directory, name):
     imports = re.findall(r"^FROM (\S+)", declaration, re.M)
     if imports != [reference.split("@")[0]]:
         raise ValueError(f"{name}: Dockerfile import and Containerfile pin must name the same tag")
+    if assets(content) != assets(declaration):
+        raise ValueError(f"{name}: Dockerfile and Containerfile remote assets differ")
+    if name == "stalwart" and not assets(content):
+        raise ValueError("Stalwart requires its pinned Web UI bundle")
     return content, reference, version
 
-def podman(*args, capture=False, merge_stderr=False, timeout=None):
+def podman(*args, capture=False, merge_stderr=False, timeout=None, input_text=None):
     command = shlex.split(os.environ.get("PODMAN_COMMAND", "podman")) + list(args)
     return subprocess.run(command, check=True, text=True, stdout=subprocess.PIPE if capture else None,
-                          stderr=subprocess.STDOUT if merge_stderr else None, timeout=timeout).stdout
+                          stderr=subprocess.STDOUT if merge_stderr else None, timeout=timeout,
+                          input=input_text).stdout
 
 def runtime_config(info):
     config = dict(info["Config"])
@@ -118,6 +149,12 @@ def audit_rootfs(path, name, spec):
             cert = members.get("etc/ssl/certs/ca-certificates.crt")
             if not cert or not cert.isfile() or not cert.size:
                 raise ValueError("Missing TLS CA bundle")
+        if name == "stalwart":
+            provenance = json.load(archive.extractfile("usr/share/obs-container/provenance.json"))
+            expected = provenance["assets"]["webui.zip"]["sha256"]
+            bundle = archive.extractfile("usr/share/stalwart/webui.zip")
+            if hashlib.file_digest(bundle, "sha256").hexdigest() != expected:
+                raise ValueError("Embedded Web UI differs from the verified OBS input")
 
 
 def archive_config(archive):
@@ -188,18 +225,20 @@ def prepare_build(name, outdir):
     directory = Path.cwd()
     content, reference, version = check_recipe(directory, name)
     config_id = verify_import(directory / "containers", reference)
+    remote_assets = verify_assets(directory, content)
     info = (directory / "_scmsync.obsinfo").read_text()
     match = re.search(r"^commit: ([0-9a-f]{40,64})$", info, re.M)
     if not match:
         raise ValueError("Missing OBS Git source revision")
     inputs = {filename: hashlib.sha256((directory / filename).read_bytes()).hexdigest()
-              for filename in ("Containerfile", "LICENSE", "NOTICE") if (directory / filename).is_file()}
+              for filename in INPUT_FILES if (directory / filename).is_file()}
     policy_hashes = {filename: hashlib.sha256((CATALOG.parent / filename).read_bytes()).hexdigest()
                      for filename in ("policy.py", "smoke.py", "images.json")}
     provenance = {"builder": "Open Build Service", "package": name, "upstream": reference,
                   "platform": "linux/amd64", "git_commit": match[1],
                   "inputs_sha256": inputs, "upstream_config_sha256": config_id,
                   "policy_sha256": policy_hashes,
+                  "assets": remote_assets,
                   "runtime_user": images()[name]["user"]}
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)

@@ -1,7 +1,11 @@
 # Immutable upstream input; Dependabot updates the tag and digest in PRs.
+#!RemoteAsset: https://github.com/stalwartlabs/webui/releases/download/v1.0.11/webui.zip sha256:d67e68caba02024301c79da9f15fe465de9bf5382cee54bdf9c309a97b4179a5 webui.zip
 FROM registry-1.docker.io/stalwartlabs/stalwart:v0.16.24-alpine@sha256:dcff88258bf65d29ab9fc424d1006c9bda7290577151488adf2a47718d736977
 #!DisableOBSContainerSupport
 # Build-time root only. Runtime needs no capabilities; use unprivileged listeners.
 USER 0:0
 RUN setcap -r /usr/local/bin/stalwart
+COPY --chmod=0644 webui.zip /usr/share/stalwart/webui.zip
+COPY --chmod=0644 LICENSE NOTICE /usr/share/licenses/stalwart-webui/
+LABEL org.stalwart.webui.version="1.0.11"
 USER 2000:2000

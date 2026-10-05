@@ -14,6 +14,11 @@ REPOSITORY = "thefutureisprivate/containers"
 
 
 def prepare(output):
+    output = Path(output).resolve()
+    if output.is_relative_to(obs.ROOT):
+        raise ValueError("Store webhook secrets outside the Git repository")
+    if output.exists():
+        raise ValueError("Use a new output file; an existing secret file will not be replaced")
     credential_file = os.environ.get("OBS_CREDENTIALS_FILE")
     if not credential_file:
         raise ValueError("Set OBS_CREDENTIALS_FILE to an external credential file")
@@ -41,9 +46,6 @@ def prepare(output):
         hooks.append({"package": name, "name": "web", "active": True, "events": ["push"],
                       "config": {"url": f"https://api.opensuse.org/trigger/webhook?id={token_id}",
                                  "content_type": "json", "secret": secret, "insecure_ssl": "0"}})
-    output = Path(output).resolve()
-    if output.is_relative_to(obs.ROOT):
-        raise ValueError("Store webhook secrets outside the Git repository")
     fd = os.open(output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "w") as stream:
         json.dump(hooks, stream, indent=2)

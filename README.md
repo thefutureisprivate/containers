@@ -28,6 +28,9 @@ The table records the latest validation; **the Containerfiles are the current ve
 
 See [Alpine versus scratch](docs/base-images.md) for the security tradeoffs.
 
+Stalwart includes a pinned Web UI bundle. See [enabling the bundled UI](docs/stalwart-webui.md)
+for the command and the first-time setup limitation.
+
 Every image declares a numeric, nonzero runtime UID and GID. OBS rejects root/implicit users, setuid/setgid files, file capabilities and image labels requesting capabilities. RADIUS privilege helpers are stripped, and Stalwart's `NET_BIND_SERVICE` file capability is removed. Merged Dependabot changes must pass the same OBS build checks before publication. Build-time `USER 0:0` instructions only modify image files; the final runtime user is unprivileged.
 
 ## Dependabot and OBS builds
@@ -70,7 +73,7 @@ python3 scripts/verify_all.py --timeout 1800
 
 `make configure` applies [`obs/project.xml`](obs/project.xml), preserving the pinned signing identity. The command also applies the root [`_config`](_config) and connects each OBS package to its Git subdirectory. Repeat configuration only when project topology or `_config` changes. `make refresh` asks OBS to fetch Git now; normal recipe updates use the package webhooks. The credential file stays outside Git and may contain JSON `username`/`password` fields or separate username/password lines, with an optional leading label.
 
-See [webhook setup](docs/webhook.md) for the connection that triggers builds after a merge. The old `OBS_CREDENTIALS` Actions secret is obsolete and can be removed. Until the webhooks are installed, `make refresh` is required after a merge. Dependabot opens PRs independently of that webhook.
+See [webhook setup](docs/webhook.md) for the installed connection that triggers builds after a merge. The old `OBS_CREDENTIALS` Actions secret is obsolete and can be removed. Dependabot opens PRs independently of that webhook.
 
 The signing verifier rejects unsigned images, wrong identities and unreviewed key changes. `verify_all.py` additionally checks that published provenance matches the checkout, its expected runtime UID/GID, and the merged runtime filesystem. Checking the effective filesystem matters for layered images: files removed by hardening may still exist in lower layers but cannot be executed from the resulting container filesystem.
 
