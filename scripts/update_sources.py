@@ -92,6 +92,10 @@ def update(name):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("packages", nargs="+", choices=list(REPOSITORIES))
+    parser.add_argument("packages", nargs="+", choices=[*REPOSITORIES, "synapse"])
     for name in parser.parse_args().packages:
-        update(name)
+        if name == "synapse":
+            from update_synapse_sources import update as update_synapse
+            update_synapse()
+        else:
+            update(name)

@@ -19,11 +19,11 @@ import zipfile
 
 CATALOG = Path(__file__).with_name("images.json")
 PIN = re.compile(r"^FROM ([a-z0-9./_-]+):([A-Za-z0-9_.-]+)@sha256:([0-9a-f]{64})(?: AS [a-z][a-z0-9_-]*)?$", re.M)
-ASSET = re.compile(r"^#!RemoteAsset: (https://(?:github.com|static.crates.io)/[A-Za-z0-9_./%+-]+) sha256:([0-9a-f]{64}) ([A-Za-z0-9][A-Za-z0-9_.+-]*)$", re.M)
+ASSET = re.compile(r"^#!RemoteAsset: (https://(?:github.com|static.crates.io|files.pythonhosted.org)/[A-Za-z0-9_./%+-]+) sha256:([0-9a-f]{64}) ([A-Za-z0-9][A-Za-z0-9_.+-]*)$", re.M)
 INPUT_FILES = ("Containerfile", "LICENSE", "NOTICE", "enable-webui.py", "nginx.conf",
                "default.conf", "entrypoint.sh", "src/go.mod", "src/go.sum", "src/tools.go",
                "_service", "source-lock.json", "upstream/Dockerfile", "requirements.txt",
-               "package.json", "package-lock.json", "build.sh")
+               "package.json", "package-lock.json", "build.sh", "wheel-lock.json", "requirements-runtime.txt")
 ALLOCATOR = Path("/usr/lib64/obs-hardened-malloc")
 PRELOAD = "/usr/local/lib/libhardened_malloc.so"
 
@@ -82,10 +82,18 @@ def recipe(directory):
             raise ValueError("Upstream release changed: run scripts/update_sources.py before merging this PR")
         version = lock["version"]
     if (directory / "requirements.txt").exists():
-        match = re.fullmatch(r"matrix-synapse==(\d+\.\d+\.\d+)\n?", (directory / "requirements.txt").read_text())
+        match = re.fullmatch(r"matrix-synapse(?:\[oidc,redis,url_preview\])?==(\d+\.\d+\.\d+)\n?", (directory / "requirements.txt").read_text())
         if not match:
             raise ValueError("Synapse requires an exact release in requirements.txt")
         version = match[1]
+        if (directory / "wheel-lock.json").exists():
+            lock = json.loads((directory / "wheel-lock.json").read_text())
+            if lock["version"] != version or lock["base"] != f"{registry}:{tag}@sha256:{digest}":
+                raise ValueError("Synapse or Python changed: refresh its source inputs before merging")
+            if hashlib.sha256((directory / "requirements-runtime.txt").read_bytes()).hexdigest() != lock["requirements_sha256"]:
+                raise ValueError("Synapse dependencies changed: refresh its source inputs before merging")
+            if assets(content) != lock["assets"]:
+                raise ValueError("Synapse asset declarations differ from the dependency lock")
     if (directory / "package.json").exists():
         version = json.loads((directory / "package.json").read_text())["dependencies"]["matter-server"]
         if not re.fullmatch(r"\d+\.\d+\.\d+", version):

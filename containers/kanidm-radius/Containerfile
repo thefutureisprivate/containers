@@ -761,6 +761,8 @@ FROM registry-1.docker.io/library/alpine:3.24.0@sha256:a2d49ea686c2adfe3c992e47d
 # apk 3 uses a plain absolute path for an offline file repository.
 RUN sed -i 's|^file:||' /etc/apkrepos_obs_dockersupport
 RUN apk add ca-certificates freeradius freeradius-eap freeradius-utils openssl libgcc
+RUN addgroup -g 496 kanidm && adduser -D -H -u 497 -G kanidm kanidm \
+    && sed -i -E 's/^([[:space:]]*)user[[:space:]]*=.*/\1user = kanidm/; s/^([[:space:]]*)group[[:space:]]*=.*/\1group = kanidm/' /etc/raddb/radiusd.conf
 COPY --from=builder /src/target/release/librlm_kanidm.so /usr/lib/freeradius/rlm_kanidm.so
 COPY --from=builder /src/target/release/kanidm_radiusd /usr/local/bin/kanidm_radiusd
 COPY --from=builder /src/rlm_kanidm/container/mods-available/ /etc/raddb/mods-available/

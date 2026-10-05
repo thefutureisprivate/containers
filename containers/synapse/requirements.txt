@@ -1,1 +1,1 @@
-matrix-synapse==1.162.0
+matrix-synapse[oidc,redis,url_preview]==1.162.0

@@ -1,5 +1,18 @@
 # Application image validation
 
+## Expanded Alpine catalog — in progress
+
+The `add-services-hardened-malloc` branch is being validated in the unpublished
+`home:thefutureisprivate:containers:staging` project. It contains 20 application
+recipes, one shared musl allocator package and the OBS policy helper. Static Go
+services remain scratch; all other final runtimes are required to identify as
+Alpine and contain its musl loader. The retired Python Matter Server has been
+replaced by `matterjs-server` 1.4.0.
+
+23 local policy tests pass. Final source builds, runtime checks, production
+publication and signature verification for this expanded catalog are still
+pending; the historical nine-image results below do not validate the new catalog.
+
 ## Native OBS pipeline and bundled Web UI — 2026-10-05
 
 All nine images were assembled, hardened, tested, signed and published by
