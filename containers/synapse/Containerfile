@@ -65,7 +65,7 @@
 #!RemoteAsset: https://files.pythonhosted.org/packages/77/c6/040cbc72480d789a5f40d63fb484d3106554c4dfa2d2b70ad5022057750f/webencodings-0.6.1-py3-none-any.whl sha256:7fab6269c8bf237c657876b52058ccb182e861518d1c695c1a9aaa8c1c105d5b webencodings-0.6.1-py3-none-any.whl
 #!RemoteAsset: https://files.pythonhosted.org/packages/2e/29/69cfbb602cd91690c55d38ba9fe53e6a7e76a6fa647bf38f19c138d25449/wheel-0.48.0-py3-none-any.whl sha256:3217dcc807155e45db462d7ef2431f5ddda0d7273b700d05a67b271ceb1287ab wheel-0.48.0-py3-none-any.whl
 #!RemoteAsset: https://files.pythonhosted.org/packages/26/39/a8481b926e42c44a6fcc670904f8251469ec42edbff1ba066719ca1e7fb4/zope_interface-8.6.tar.gz sha256:b40ef9b4873afb5d0dec02b8d2dfde1cf18c72337b60c99cb735961e0bac05c0 zope_interface-8.6.tar.gz
-FROM registry-1.docker.io/library/alpine:3.24.0@sha256:a2d49ea686c2adfe3c992e47dc3b5e7fa6e6b5055609400dc2acaeb241c829f4 AS builder
+FROM registry-1.docker.io/library/alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 AS builder
 # apk 3 uses a plain absolute path for OBS's offline repository.
 RUN sed -i 's|^file:||' /etc/apkrepos_obs_dockersupport
 RUN apk add python3 python3-dev build-base musl-dev pkgconf
@@ -75,7 +75,7 @@ COPY *.whl *.tar.gz requirements-runtime.txt /inputs/
 RUN PYTHONPATH="$(echo /inputs/pip-*.whl)" python3 -m pip install --no-index --no-deps /inputs/pip-*.whl /inputs/setuptools-*.whl /inputs/wheel-*.whl /inputs/packaging-*.whl \
     && pip install --no-index --find-links=/inputs --require-hashes --no-build-isolation -r /inputs/requirements-runtime.txt \
     && pip check
-FROM registry-1.docker.io/library/alpine:3.24.0@sha256:a2d49ea686c2adfe3c992e47dc3b5e7fa6e6b5055609400dc2acaeb241c829f4
+FROM registry-1.docker.io/library/alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
 RUN sed -i 's|^file:||' /etc/apkrepos_obs_dockersupport
 RUN apk add python3 libgcc libstdc++
 COPY --from=builder /opt/venv /opt/venv
