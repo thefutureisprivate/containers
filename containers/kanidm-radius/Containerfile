@@ -749,7 +749,7 @@ COPY upstream.tar.gz vendor.tar.gz /tmp/
 RUN tar -xzf /tmp/upstream.tar.gz -C /src --strip-components=1 && tar -xzf /tmp/vendor.tar.gz -C /src \
     && mkdir -p .cargo && printf '[source.crates-io]\nreplace-with = "vendored-sources"\n[source.vendored-sources]\ndirectory = "vendor"\n' > .cargo/config.toml
 # Dynamic musl linking allows hardened_malloc to interpose Rust's system allocator.
-ENV RUSTFLAGS="-C target-feature=-crt-static" CARGO_NET_OFFLINE=true CARGO_BUILD_JOBS=2
+ENV RUSTFLAGS="-C target-feature=-crt-static" CARGO_NET_OFFLINE=true CARGO_BUILD_JOBS=2 RUST_MIN_STACK=67108864
 RUN apk add freeradius-dev talloc-dev
 RUN cp rlm_kanidm/module/include/automask.h rlm_kanidm/module/include/connection.h rlm_kanidm/module/include/log.h \
       rlm_kanidm/module/include/xlat.h rlm_kanidm/module/include/tmpl.h rlm_kanidm/module/include/clients.h \

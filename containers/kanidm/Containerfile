@@ -749,7 +749,7 @@ COPY upstream.tar.gz vendor.tar.gz /tmp/
 RUN tar -xzf /tmp/upstream.tar.gz -C /src --strip-components=1 && tar -xzf /tmp/vendor.tar.gz -C /src \
     && mkdir -p .cargo && printf '[source.crates-io]\nreplace-with = "vendored-sources"\n[source.vendored-sources]\ndirectory = "vendor"\n' > .cargo/config.toml
 # Dynamic musl linking allows hardened_malloc to interpose Rust's system allocator.
-ENV RUSTFLAGS="-C target-feature=-crt-static" CARGO_NET_OFFLINE=true CARGO_BUILD_JOBS=2
+ENV RUSTFLAGS="-C target-feature=-crt-static" CARGO_NET_OFFLINE=true CARGO_BUILD_JOBS=2 RUST_MIN_STACK=67108864
 ENV KANIDM_BUILD_PROFILE=container_generic
 RUN cargo build --offline --locked --release -p daemon && strip target/release/kanidmd
 FROM registry-1.docker.io/library/alpine:3.24.0@sha256:a2d49ea686c2adfe3c992e47dc3b5e7fa6e6b5055609400dc2acaeb241c829f4
