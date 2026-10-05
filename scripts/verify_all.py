@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Verify OBS-published images, their Git provenance and effective runtime files."""
 import argparse
+from functools import lru_cache
 import hashlib
 import json
 import re
@@ -16,6 +17,46 @@ import obs
 
 sys.path.insert(0, str(obs.ROOT / "containers/obs-service-container_policy"))
 from policy import INPUT_FILES, archive_config, assets, audit_rootfs, audit_runtime, images, podman, recipe
+
+
+def rendered_allocator_spec(spec, release):
+    """Reproduce the two metadata edits OBS makes to this RPM build recipe."""
+    if not re.fullmatch(r"\d+\.\d+", release) or re.search(r"^VCS:", spec, re.M):
+        raise ValueError("Unexpected allocator RPM metadata")
+    vcs = "https://github.com/thefutureisprivate/containers?subdir=containers/hardened-malloc#main"
+    rendered, names = re.subn(r"^(Name:[^\n]*\n)", lambda match: match[1] + "VCS: " + vcs + "\n", spec, flags=re.M)
+    rendered, releases = re.subn(r"^(Release:[ \t]*)\S+[ \t]*$", lambda match: match[1] + release,
+                                rendered, flags=re.M)
+    if names != 1 or releases != 1:
+        raise ValueError("Expected one allocator RPM name and release")
+    return rendered.encode()
+
+
+@lru_cache(maxsize=1)
+def expected_allocator_build():
+    directory = obs.ROOT / "containers/hardened-malloc"
+    spec = (directory / "obs-hardened-malloc.spec").read_text()
+    version = re.search(r"^Version:\s+(\S+)", spec, re.M)[1]
+    client = obs.Client()
+    path = f"/build/{obs.project()}/tooling/x86_64/hardened-malloc"
+    history = ET.fromstring(client.request("GET", path + "/_history", query={"limit": "1"})).find("entry")
+    buildinfo = ET.fromstring(client.request("GET", path + "/_buildinfo"))
+    if history is None or history.get("srcmd5") != buildinfo.findtext("srcmd5"):
+        raise ValueError("Shared allocator build is not current")
+    release = re.fullmatch(re.escape(version) + r"-(\d+)", history.get("versrel", ""))
+    if release is None:
+        raise ValueError("Shared allocator build version differs from Git")
+    compiled_spec = rendered_allocator_spec(spec, release[1] + "." + history.get("bcnt", ""))
+    pins = re.findall(r"^#!RemoteAsset: \S+ sha256:([0-9a-f]{64})$", spec, re.M)
+    hashes = {f: hashlib.sha256((directory / f).read_bytes()).hexdigest()
+              for f in ("allocator-check.c", "manifest.py")}
+    hashes["obs-hardened-malloc.spec"] = hashlib.sha256(compiled_spec).hexdigest()
+    return {
+        "builder": "Open Build Service", "version": version,
+        "source_sha256": pins[0], "musl_headers_sha256": pins[1],
+        "configuration": {"variant": "default", "native": False, "cxx_allocator": False},
+        "recipe_sha256": hashes,
+    }
 
 
 def expected_provenance(name, commit):
@@ -54,18 +95,7 @@ def verify_runtime(directory, name, commit):
             if actual.get(key) != value:
                 raise ValueError(f"{name}: signed provenance differs from this Git checkout ({key})")
         if images()[name]["allocator"] == "musl":
-            directory = obs.ROOT / "containers/hardened-malloc"
-            spec = (directory / "obs-hardened-malloc.spec").read_text()
-            pins = re.findall(r"^#!RemoteAsset: \S+ sha256:([0-9a-f]{64})$", spec, re.M)
-            expected = {
-                "builder": "Open Build Service",
-                "version": re.search(r"^Version:\s+(\S+)", spec, re.M)[1],
-                "source_sha256": pins[0], "musl_headers_sha256": pins[1],
-                "configuration": {"variant": "default", "native": False, "cxx_allocator": False},
-                "recipe_sha256": {f: hashlib.sha256((directory / f).read_bytes()).hexdigest()
-                                  for f in ("allocator-check.c", "manifest.py", "obs-hardened-malloc.spec")},
-            }
-            for key, value in expected.items():
+            for key, value in expected_allocator_build().items():
                 if actual["allocator"]["build"].get(key) != value:
                     raise ValueError(f"{name}: shared allocator provenance differs from Git ({key})")
     finally:
