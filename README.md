@@ -1,8 +1,8 @@
 # Signed OBS containers
 
-Recipes for [home:thefutureisprivate:containers](https://build.opensuse.org/project/show/home:thefutureisprivate:containers), maintained in [thefutureisprivate/containers](https://github.com/thefutureisprivate/containers). **OBS builds, tests, signs and publishes the images.** GitHub stores recipes and Dependabot PRs; there are no GitHub Actions jobs.
+Recipes for [home:thefutureisprivate:containers](https://build.opensuse.org/project/show/home:thefutureisprivate:containers), maintained in [thefutureisprivate/containers](https://github.com/thefutureisprivate/containers). **OBS builds, tests, signs and publishes the images.** GitHub stores recipes and runs Dependabot's dependency-update jobs, which appear in its Actions interface. The repository defines no GitHub Actions workflows for building images.
 
-The runtime policy is **scratch for static Go services, Alpine for everything else**. All 20 recipes have passed builds and smoke checks in the unpublished `home:thefutureisprivate:containers:staging` project. Production publication and signature verification are in progress; see the [validation records](docs/validation.md).
+The runtime policy is **scratch for static Go services, Alpine for everything else**. All 20 images have passed OBS builds and smoke checks, publication, signature verification and checks against their Git recipes. See the [verified releases and validation records](docs/validation.md).
 
 ## Images
 

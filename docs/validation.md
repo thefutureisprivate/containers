@@ -1,29 +1,99 @@
 # Application image validation
 
-## Expanded Alpine catalog — production migration in progress
+## Expanded Alpine catalog — 2026-10-05
 
-The `add-services-hardened-malloc` branch is being validated in the unpublished
-`home:thefutureisprivate:containers:staging` project. It contains 20 application
-recipes, one shared musl allocator package and the OBS policy helper. Static Go
-services remain scratch; all other final runtimes are required to identify as
-Alpine and contain its musl loader. The retired Python Matter Server has been
-replaced by `matterjs-server` 1.4.0.
+All **20 application images** were built, tested, signed and published by
+`home:thefutureisprivate:containers` from GitHub `main`. The same recipes first
+passed the unpublished staging project. Production source hashes and each
+package's Git revision were compared with the tested checkout before release.
+The staging project now has builds and publication disabled, preserving its
+successful build history.
 
-All 20 staging builds and their OBS smoke checks passed on 2026-10-05, including
-the Alpine source builds of Kanidm, RADIUS, MAS, OpenThread and Matter.js, and
-Synapse's musl wheels/native extension. The shared allocator and policy RPMs also
-built successfully. A separate preflight compared successful build source IDs,
-recipe hashes and per-package Git revisions with the checkout. All 23 local
-policy tests pass.
+The catalog contains **six scratch runtimes for static Go services and 14 Alpine
+runtimes**. Kanidm, RADIUS, MAS and OpenThread are compiled for Alpine in OBS;
+Synapse uses pinned musl wheels and an extension compiled in OBS; Matter uses
+the maintained `matterjs-server` successor, with its native npm modules rebuilt
+in OBS. Stalwart retains its bundled Web UI and enable command.
 
-Production publication and signature verification are still pending; the
-historical nine-image results below do not validate the new published catalog.
+All **26 local policy tests** and all **20 OBS smoke checks** passed. Each final
+image has an explicit nonzero numeric UID:GID, and its effective filesystem was
+checked for setuid/setgid files and file capabilities. OBS checked Alpine/musl
+identity or the static ELF executables and exercised applicable services with
+dropped capabilities, no-new-privileges and a read-only root filesystem.
+Hardware, live identity/RADIUS authentication, mail delivery, ACME issuance and
+database migrations still require deployment-specific testing.
+
+OBS built one musl allocator RPM, `obs-hardened-malloc-2026100200-1.1`, and the
+policy helper `1.0-4.1`. All **14 signed Alpine images contain identical shared
+allocator bytes** with SHA-256:
+
+```text
+dc9754a00ee218a6a7364b2ec50cec6c36c7f00e252e0ede309dc2e68c46bbd2
+```
+
+The verifier checked both the artifact hashes and their source/build recipe
+provenance against Git, reproducing OBS's VCS and release-number additions to
+the RPM spec before comparing its complete hash. Static Go, Stalwart's embedded
+jemalloc, Vaultwarden's static server and other internal allocators retain the documented coverage
+limits in [the README](../README.md#hardening-and-allocator).
+
+GitHub successfully processed the expanded Dependabot configuration at commit
+`f3419d81988f29c5c25efe47f49cdcb20041433f`:
+[Docker](https://github.com/thefutureisprivate/containers/actions/runs/37307296155),
+[Go](https://github.com/thefutureisprivate/containers/actions/runs/37307296680),
+[npm](https://github.com/thefutureisprivate/containers/actions/runs/37307296554), and
+[pip](https://github.com/thefutureisprivate/containers/actions/runs/37307295946).
+These managed update jobs maintain dependency PRs; image compilation and assembly
+remain in OBS. All 20 package-scoped GitHub hooks accepted the subsequent push
+with HTTP 200. Ten Dependabot PRs were open after these scans; sampled Docker
+PRs updated both `Containerfile` and the scheduler's `Dockerfile`. Those updates
+remain separate from this tested release and require review before merging.
+
+After publication, `scripts/verify_all.py` verified every release below using
+the pinned OBS signing key and matching image identity. It then compared signed
+Git provenance, input hashes and policy hashes, checked runtime users, and
+audited each merged filesystem. The additional release check compared the
+allocator across all 14 Alpine images. No application image was built locally
+or in GitHub during this validation.
+
+| Signed image release | Verified manifest digest |
+| --- | --- |
+| `alertmanager:0.34.1-2.3` | `sha256:4351c60950df210f3fca534c8e94ece5f707032194b42dc07319bb50e1a069fd` |
+| `blackbox-exporter:0.28.0-2.3` | `sha256:de9d661d9d3e0a0833d3b58d52edfedaf3c702ff6270139f356027f942dfdc0d` |
+| `certbot:5.8.0-1.1` | `sha256:a5c4f6bac0fc911a2b2bcc77e24dad2c0deb6a80b2f86e14fca35f6348b7a8e4` |
+| `certspotter:0.25.0-3.1` | `sha256:8d129c957ad70bf5a900376dad8670f9515612460f6bd3dc7691443159a34cad` |
+| `eclipse-mosquitto:2.1.2-alpine-1.1` | `sha256:76d1ca46abf5c5e0d777618a980ef62f8c381e0113826830a0e54e76e44f3d52` |
+| `element-web:1.12.30-1.1` | `sha256:7dacd0b74db34565d57aaf474c9a511fca0a1a5d8554cfeaebf6d69babdf07f5` |
+| `home-assistant:2026.9.4-1.1` | `sha256:7506307818a09dd06941b54fe327ec688c7e1a5f59d146b724fd28af16e044a7` |
+| `kanidm:1.11.2-3.1` | `sha256:030c750434e3b05a6b0d8d555f4b4fd0ce37465e8bc2ae2da7429db3037dcf6e` |
+| `kanidm-radius:1.11.2-4.1` | `sha256:860eadff53f855ac8b8c7d3b42e0de821eef7e3d6726d6154f4fa4504860f524` |
+| `matrix-authentication-service:1.26.0-1.1` | `sha256:aed9e4a621a1a27fa3c67e44dda8977805f37690a377c3fb1040f981e2b79224` |
+| `matterjs-server:1.4.0-2.1` | `sha256:8f6b8c7cac01f823ad760748b4eb82af515a6a08a5c023815eb622121941a657` |
+| `nginx:1.30.0-alpine-1.1` | `sha256:c09c27d940c6d85978da309d08dbac1559cf02bea11ddcd1c1771ad3d36e0c09` |
+| `node-exporter:1.12.1-2.3` | `sha256:d0f630b83367c282a384908265ffb1fa224fdaa6a9869e18a60b97f4604e34cf` |
+| `openthread-border-router:2026.10.0-1.1` | `sha256:312303ce6f627c77483ef92edbce91de826211481322b1e397777de68ce2ddfe` |
+| `postgres-exporter:0.20.1-2.3` | `sha256:2353880d5fb42807f5d57111c91a8596f3fdc3995f35a814487bca303725890d` |
+| `postgresql:18.6-alpine3.24-4.1` | `sha256:6c16e448d9a6d136922c626edb9cd414ee7cc9ba10fd55520b8bd04bc7188719` |
+| `prometheus:3.15.0-2.3` | `sha256:f8e2b9c26de289c377c1e548c8e0e11db6d56fb782d870e70e70d2f57bb4f9b2` |
+| `stalwart:0.16.24-alpine-5.1` | `sha256:0847301c44517a7d0bcc9a3ab19a76114bfce8772731d667bd554e16b174a10c` |
+| `synapse:1.162.0-1.1` | `sha256:0aa0e2069df8d24f4a02a61fb684de708fdd41811fbcc873691b3b99fcbd0cc1` |
+| `vaultwarden:1.37.3-alpine-1.1` | `sha256:c22074b18610b503585f6a75ccf1acb26ce68f51ca7d6dcee18fc7f77397c50c` |
+
+The registry prefix is
+`registry.opensuse.org/home/thefutureisprivate/containers/containers/`.
+The pinned OBS signing-key fingerprint is
+`DD87A6E5C1750F5565E2BFF04B95B6E079AF43C2`.
+Full local output is retained in `.build/native-verification-expanded.log`,
+with machine-readable evidence in `.build/expanded-verification-results.json`
+(both ignored by Git).
 
 ## Native OBS pipeline and bundled Web UI — 2026-10-05
 
+This section records the earlier nine-image release.
+
 All nine images were assembled, hardened, tested, signed and published by
 `home:thefutureisprivate:containers`. The application binaries remain pinned
-upstream inputs; this pipeline does not recompile the applications from source.
+upstream inputs in this earlier release; it did not recompile the applications from source.
 GitHub has no image build workflows. All ten package-scoped push webhooks returned
 HTTP 200, and OBS fetched the pushed Git revisions itself.
 
