@@ -194,9 +194,12 @@ def prepare_build(name, outdir):
         raise ValueError("Missing OBS Git source revision")
     inputs = {filename: hashlib.sha256((directory / filename).read_bytes()).hexdigest()
               for filename in ("Containerfile", "LICENSE", "NOTICE") if (directory / filename).is_file()}
+    policy_hashes = {filename: hashlib.sha256((CATALOG.parent / filename).read_bytes()).hexdigest()
+                     for filename in ("policy.py", "smoke.py", "images.json")}
     provenance = {"builder": "Open Build Service", "package": name, "upstream": reference,
                   "platform": "linux/amd64", "git_commit": match[1],
                   "inputs_sha256": inputs, "upstream_config_sha256": config_id,
+                  "policy_sha256": policy_hashes,
                   "runtime_user": images()[name]["user"]}
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)

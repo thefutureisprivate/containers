@@ -22,9 +22,13 @@ def expected_provenance(name, commit):
     _, reference, _ = recipe(directory)
     inputs = {filename: hashlib.sha256((directory / filename).read_bytes()).hexdigest()
               for filename in ("Containerfile", "LICENSE", "NOTICE") if (directory / filename).is_file()}
+    policy_dir = obs.ROOT / "containers/obs-service-container_policy"
+    policy_hashes = {filename: hashlib.sha256((policy_dir / filename).read_bytes()).hexdigest()
+                     for filename in ("policy.py", "smoke.py", "images.json")}
     return {"builder": "Open Build Service", "package": name, "upstream": reference,
             "platform": "linux/amd64", "git_commit": commit,
-            "inputs_sha256": inputs, "runtime_user": images()[name]["user"]}
+            "inputs_sha256": inputs, "policy_sha256": policy_hashes,
+            "runtime_user": images()[name]["user"]}
 
 
 def verify_runtime(directory, name, commit):
@@ -77,7 +81,12 @@ def verify_all(timeout):
                     with tempfile.TemporaryDirectory(prefix="obs-release-") as tmp:
                         directory = Path(tmp) / "verified"
                         obs.verify(name, tag, directory)
-                        verify_runtime(directory, name, commit)
+                        # SCM bridge records the last Git change to each package,
+                        # which can precede the project branch's current HEAD.
+                        recipe_commit = subprocess.check_output(
+                            ["git", "log", "-1", "--format=%H", "--", f"containers/{name}"],
+                            cwd=obs.ROOT, text=True).strip()
+                        verify_runtime(directory, name, recipe_commit)
                 except subprocess.CalledProcessError:
                     # Registry publication and the detached signature store can lag.
                     continue
