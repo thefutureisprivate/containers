@@ -1,6 +1,8 @@
 #!RemoteAsset: https://github.com/openthread/ot-br-posix/releases/download/v2026.10.0/ot-br-posix-v2026.10.0.tar.gz sha256:73345d2b5061a7c834fac0b76d4e0f741a1c5af74af749f4a216df919bf1fd3d upstream.tar.gz
 FROM registry-1.docker.io/library/alpine:3.24.0@sha256:a2d49ea686c2adfe3c992e47dc3b5e7fa6e6b5055609400dc2acaeb241c829f4 AS builder
-RUN apk add build-base cmake ninja linux-headers jsoncpp-dev libmnl-dev libnftnl-dev pkgconf
+# apk 3 uses a plain absolute path for an offline file repository.
+RUN sed -i 's|^file:||' /etc/apkrepos_obs_dockersupport
+RUN apk add build-base musl-dev cmake ninja-build linux-headers jsoncpp-dev libmnl-dev libnftnl-dev pkgconf
 WORKDIR /src
 COPY upstream.tar.gz /tmp/
 RUN tar -xzf /tmp/upstream.tar.gz -C /src --strip-components=1
@@ -9,8 +11,11 @@ RUN cmake -S . -B build -G Ninja -DBUILD_TESTING=OFF -DCMAKE_BUILD_TYPE=Release 
       -DOTBR_REST=ON -DOTBR_WEB=OFF -DOT_POSIX_NAT64_CIDR=192.168.255.0/24 -DOT_FIREWALL=ON \
     && cmake --build build --parallel 2 && DESTDIR=/out cmake --install build
 FROM registry-1.docker.io/library/alpine:3.24.0@sha256:a2d49ea686c2adfe3c992e47dc3b5e7fa6e6b5055609400dc2acaeb241c829f4
+# apk 3 uses a plain absolute path for an offline file repository.
+RUN sed -i 's|^file:||' /etc/apkrepos_obs_dockersupport
 RUN apk add ca-certificates libstdc++ jsoncpp libmnl libnftnl iproute2 iptables ipset
 COPY --from=builder /out/ /
+COPY --from=builder /src/LICENSE /usr/share/licenses/openthread/LICENSE
 COPY --chmod=0755 entrypoint.sh /usr/local/bin/otbr-start
 RUN mkdir -p /data /var/lib/thread && chown -R 65532:65532 /data /var/lib/thread
 ENV HOME=/data

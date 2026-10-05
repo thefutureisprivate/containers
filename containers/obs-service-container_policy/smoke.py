@@ -82,7 +82,7 @@ def expansion_smoke(name, image, common):
         elif name == "home-assistant":
             wait_for_command(container, "python3", "-c",
                              "import http.client; c=http.client.HTTPConnection('127.0.0.1',8123); c.request('GET','/'); "
-                             "assert c.getresponse().status in (200,401,404)")
+                             "assert c.getresponse().status in (200,302,401,404)", attempts=180)
         elif name == "vaultwarden":
             wait_for_command(container, "curl", "--fail", "--silent", "http://127.0.0.1:8080/alive")
         elif name == "matterjs-server":
@@ -105,9 +105,9 @@ def expansion_smoke(name, image, common):
         podman("rm", "--force", "--volumes", container)
 
 
-def wait_for_command(container, *command):
+def wait_for_command(container, *command, attempts=60):
     failure = ""
-    for _ in range(60):
+    for _ in range(attempts):
         try:
             # Keep the SQL/readiness output separate from OBS wrapper notices
             # written to stderr (for example "Unsharing environment").

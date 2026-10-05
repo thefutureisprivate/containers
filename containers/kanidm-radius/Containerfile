@@ -741,7 +741,9 @@
 #!RemoteAsset: https://static.crates.io/crates/zxcvbn/zxcvbn-3.1.1.crate sha256:f9eaee90f4a795d1eb4ba6c51e1c1721d4784d550e8efa7b2600f29c867365e0 crate-zxcvbn-3.1.1.crate
 #!RemoteAsset: https://github.com/kanidm/kanidm/archive/refs/tags/v1.11.2.tar.gz sha256:a8ed31203e5f8c036b9cb261c85ddac19291bc6ca16981495495cd9621c56529 upstream.tar.gz
 FROM registry-1.docker.io/library/alpine:3.24.0@sha256:a2d49ea686c2adfe3c992e47dc3b5e7fa6e6b5055609400dc2acaeb241c829f4 AS builder
-RUN apk add cargo clang build-base cmake pkgconf openssl-dev
+# apk 3 uses a plain absolute path for an offline file repository.
+RUN sed -i 's|^file:||' /etc/apkrepos_obs_dockersupport
+RUN apk add cargo clang22 clang22-libclang musl-dev build-base cmake pkgconf openssl-dev
 WORKDIR /src
 COPY upstream.tar.gz vendor.tar.gz /tmp/
 RUN tar -xzf /tmp/upstream.tar.gz -C /src --strip-components=1 && tar -xzf /tmp/vendor.tar.gz -C /src \
@@ -756,6 +758,8 @@ RUN cargo build --offline --locked --release -p rlm_kanidm --features extern-fre
     && cargo build --offline --locked --release -p kanidm_radiusd --bin kanidm_radiusd \
     && strip target/release/librlm_kanidm.so target/release/kanidm_radiusd
 FROM registry-1.docker.io/library/alpine:3.24.0@sha256:a2d49ea686c2adfe3c992e47dc3b5e7fa6e6b5055609400dc2acaeb241c829f4
+# apk 3 uses a plain absolute path for an offline file repository.
+RUN sed -i 's|^file:||' /etc/apkrepos_obs_dockersupport
 RUN apk add ca-certificates freeradius freeradius-eap freeradius-utils openssl libgcc
 COPY --from=builder /src/target/release/librlm_kanidm.so /usr/lib/freeradius/rlm_kanidm.so
 COPY --from=builder /src/target/release/kanidm_radiusd /usr/local/bin/kanidm_radiusd
@@ -766,6 +770,7 @@ RUN ln -sf ../mods-available/kanidm_rust /etc/raddb/mods-enabled/kanidm \
     && rm -f /etc/raddb/mods-enabled/passwd /etc/raddb/mods-enabled/totp /etc/raddb/mods-available/sql \
     && mkdir -p /data /etc/raddb/certs /run/radiusd /var/log/radius \
     && chown -R 497:496 /data /etc/raddb /run/radiusd /var/log/radius
+COPY --from=builder /src/LICENSE.md /usr/share/licenses/kanidm/LICENSE.md
 ENV KANIDM_CONFIG_FILE=/data/radius.toml HOME=/data
 VOLUME ["/data"]
 EXPOSE 1812/udp 1813/udp

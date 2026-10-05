@@ -746,4 +746,4 @@
 FROM registry-1.docker.io/library/alpine:3.24.0
 RUN obs_pkg_mgr add_repo http://download.opensuse.org/repositories/Alpine:/Latest/main/
 RUN obs_pkg_mgr add_repo http://download.opensuse.org/repositories/Alpine:/Latest/community/
-RUN apk add cargo clang build-base cmake pkgconf openssl-dev freeradius-dev talloc-dev ca-certificates freeradius freeradius-eap freeradius-utils openssl libgcc
+RUN apk add cargo clang22 clang22-libclang musl-dev build-base cmake pkgconf openssl-dev freeradius-dev talloc-dev ca-certificates freeradius freeradius-eap freeradius-utils openssl libgcc
