@@ -57,18 +57,22 @@ def verify_runtime(directory, name, commit):
 
 def verify_all(timeout):
     client = obs.Client()
-    commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=obs.ROOT, text=True).strip()
     pending = set(images())
     deadline = time.monotonic() + timeout
     while pending and time.monotonic() < deadline:
         results = ET.fromstring(client.request("GET", f"/build/{obs.project()}/_result"))
         repository = results.find(f"result[@repository='{obs.REPOSITORY}'][@arch='x86_64']")
-        if repository is not None and repository.get("state") == "published" and repository.findtext("scminfo") == commit:
+        if repository is not None and repository.get("state") == "published":
             for name in sorted(pending.copy()):
                 status = repository.find(f"status[@package='{name}']")
                 if status is None or status.get("code") != "succeeded":
                     continue
                 path = f"/build/{obs.project()}/{obs.REPOSITORY}/x86_64/{name}"
+                buildinfo = ET.fromstring(client.request("GET", path + "/_buildinfo"))
+                history = ET.fromstring(client.request("GET", path + "/_history", query={"limit": "1"}))
+                built = history.find("entry")
+                if built is None or built.get("srcmd5") != buildinfo.findtext("srcmd5"):
+                    continue
                 binaries = ET.fromstring(client.request("GET", path))
                 info_files = [b.get("filename") for b in binaries if b.get("filename", "").endswith(".containerinfo")]
                 if len(info_files) != 1:

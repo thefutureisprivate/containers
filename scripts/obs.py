@@ -136,18 +136,27 @@ def pin_key(client):
 
 
 def configure(client):
-    """Apply the declared project topology; sources and build config come from Git."""
+    """Apply topology and bind each real OBS package to its Git directory."""
     check()
     desired = (ROOT / "obs/project.xml").read_bytes()
     client.request("PUT", source_path(filename="_meta"), desired)
     if client.request("GET", source_path(filename="_pubkey"), missing_ok=True) is None:
         client.request("POST", source_path(), b"", {"cmd": "createkey"})
     pin_key(client)
+    client.request("PUT", source_path(filename="_config"), (ROOT / "_config").read_bytes())
+    for name in ["obs-service-container_policy", *package_manifest()]:
+        meta = ET.Element("package", name=name, project=project())
+        ET.SubElement(meta, "title").text = name
+        ET.SubElement(meta, "description").text = "Built, checked, signed and published by OBS from Git."
+        ET.SubElement(meta, "scmsync").text = (
+            "https://github.com/thefutureisprivate/containers?subdir=containers/" + name + "#main")
+        client.request("PUT", source_path(name, "_meta"), ET.tostring(meta))
     print(f"Configured OBS Git builds: {project()}")
 
 
 def refresh(client):
-    client.request("POST", source_path("_project"), b"", {"cmd": "runservice"})
+    for name in ["obs-service-container_policy", *package_manifest()]:
+        client.request("POST", source_path(name), b"", {"cmd": "runservice"})
     print("Requested OBS to fetch the current main branch")
 
 

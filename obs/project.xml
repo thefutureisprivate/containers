@@ -9,7 +9,6 @@
     <enable repository="containers"/>
     <disable repository="tooling"/>
   </publish>
-  <scmsync>https://github.com/thefutureisprivate/containers#main</scmsync>
   <repository name="containers">
     <path project="home:thefutureisprivate:containers" repository="tooling"/>
     <path project="Docker:Registry" repository="standard"/>

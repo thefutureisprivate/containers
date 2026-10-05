@@ -34,11 +34,11 @@ Every image declares a numeric, nonzero runtime UID and GID. OBS rejects root/im
 
 [Dependabot](.github/dependabot.yml) checks upstream image tags and digests daily and proposes PRs. Updates require review and merging; they are not automatically merged. Kanidm and RADIUS updates are grouped when available together. PostgreSQL major releases require a database migration plan.
 
-GitHub stores the recipes and update PRs. **There are no GitHub Actions build, test, signing or publishing jobs, and GitHub needs no OBS account password.** An OBS SCM webhook notifies OBS after Git changes. OBS fetches the `main` branch itself through its [SCM bridge](https://openbuildservice.org/help/manuals/obs-user-guide/cha-obs-scm-bridge.html).
+GitHub stores the recipes and update PRs. **There are no GitHub Actions build, test, signing or publishing jobs, and GitHub needs no OBS account password.** Package-scoped OBS SCM webhooks notify OBS after Git changes. OBS fetches the `main` branch itself through its [SCM bridge](https://openbuildservice.org/help/manuals/obs-user-guide/cha-obs-scm-bridge.html).
 
 OBS performs the complete image pipeline:
 
-1. Read `_manifest` and `_config` from Git and import the nine versioned upstream images using OBS's `Docker:Registry` service.
+1. Fetch each package's Git directory and import the nine versioned upstream images using OBS's `Docker:Registry` service.
 2. Build the policy helper RPM in the `tooling` repository. Each container depends on this helper.
 3. Inside the isolated OBS build VM, check the imported registry digest, image configuration hash and every layer against the pin. A mismatch fails the build.
 4. Build the complete Containerfile with Podman, applying file hardening and the numeric non-root user. The build uses the imported image with `--pull=never`.
@@ -68,9 +68,9 @@ make log IMAGE=prometheus
 python3 scripts/verify_all.py --timeout 1800
 ```
 
-`make configure` applies [`obs/project.xml`](obs/project.xml), preserving the pinned signing identity. OBS obtains its build configuration from the root [`_config`](_config), not a GitHub job. `make refresh` asks OBS to fetch Git now; normal updates use the webhook. The credential file stays outside Git and may contain JSON `username`/`password` fields or separate username/password lines, with an optional leading label.
+`make configure` applies [`obs/project.xml`](obs/project.xml), preserving the pinned signing identity. The command also applies the root [`_config`](_config) and connects each OBS package to its Git subdirectory. Repeat configuration only when project topology or `_config` changes. `make refresh` asks OBS to fetch Git now; normal recipe updates use the package webhooks. The credential file stays outside Git and may contain JSON `username`/`password` fields or separate username/password lines, with an optional leading label.
 
-See [webhook setup](docs/webhook.md) for the connection that triggers builds after a merge. The old `OBS_CREDENTIALS` Actions secret is obsolete and can be removed. Until the webhook is installed, `make refresh` is required after a merge. Dependabot opens PRs independently of that webhook.
+See [webhook setup](docs/webhook.md) for the connection that triggers builds after a merge. The old `OBS_CREDENTIALS` Actions secret is obsolete and can be removed. Until the webhooks are installed, `make refresh` is required after a merge. Dependabot opens PRs independently of that webhook.
 
 The signing verifier rejects unsigned images, wrong identities and unreviewed key changes. `verify_all.py` additionally checks that published provenance matches the checkout, its expected runtime UID/GID, and the merged runtime filesystem. Checking the effective filesystem matters for layered images: files removed by hardening may still exist in lower layers but cannot be executed from the resulting container filesystem.
 
