@@ -1,0 +1,20 @@
+{
+  "version": "1.26.0",
+  "upstream": "ghcr.io/element-hq/matrix-authentication-service:1.26.0@sha256:e089f1048a1d4a9a492ed17b9fe759100f1bd619407b001f5927928d88b780c4",
+  "assets": {
+    "upstream.tar.gz": {
+      "url": "https://github.com/element-hq/matrix-authentication-service/archive/refs/tags/v1.26.0.tar.gz",
+      "sha256": "57dbb7dabf98182819da16af364797ba6bc58b2b97ac5cf246740352d2c4fa60",
+      "top": [
+        "matrix-authentication-service-1.26.0"
+      ]
+    },
+    "mas-release.tar.gz": {
+      "url": "https://github.com/element-hq/matrix-authentication-service/releases/download/v1.26.0/mas-cli-x86_64-linux.tar.gz",
+      "sha256": "351d58d47dc8fb7656d1db2d6caed73915f3923297d7ec98070de52459adced0",
+      "top": [
+        "."
+      ]
+    }
+  }
+}

@@ -1,0 +1,10 @@
+<services>
+  <service name="node_modules">
+    <param name="input">package-lock.json</param>
+    <param name="legacy-container">true</param>
+    <param name="cpio">node_modules.obscpio</param>
+  </service>
+  <service name="container_policy" mode="buildtime">
+    <param name="name">matterjs-server</param>
+  </service>
+</services>

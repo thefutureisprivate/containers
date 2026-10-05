@@ -1,26 +1,26 @@
 {
   "kanidm": {
-    "runtime": "scratch",
+    "runtime": "alpine",
     "binaries": [],
     "smoke": [
       "/sbin/kanidmd",
       "version"
     ],
     "user": "65532:65532",
-    "allocator": "glibc"
+    "allocator": "musl"
   },
   "kanidm-radius": {
-    "runtime": "upstream",
+    "runtime": "alpine",
     "binaries": [],
     "smoke": [
       "/usr/sbin/radiusd",
       "-v"
     ],
     "user": "497:496",
-    "allocator": "glibc"
+    "allocator": "musl"
   },
   "stalwart": {
-    "runtime": "upstream",
+    "runtime": "alpine",
     "binaries": [],
     "smoke": [
       "/usr/local/bin/stalwart",
@@ -98,7 +98,7 @@
     "allocator_note": "Static Go application; its Go heap cannot use LD_PRELOAD."
   },
   "postgresql": {
-    "runtime": "upstream",
+    "runtime": "alpine",
     "binaries": [],
     "smoke": [
       "postgres",
@@ -122,7 +122,7 @@
     "version_from": "src/go.mod"
   },
   "certbot": {
-    "runtime": "upstream",
+    "runtime": "alpine",
     "binaries": [],
     "smoke": [
       "certbot",
@@ -132,7 +132,7 @@
     "allocator": "musl"
   },
   "nginx": {
-    "runtime": "upstream",
+    "runtime": "alpine",
     "binaries": [],
     "smoke": [
       "nginx",
@@ -142,7 +142,7 @@
     "allocator": "musl"
   },
   "element-web": {
-    "runtime": "upstream",
+    "runtime": "alpine",
     "binaries": [],
     "smoke": [
       "nginx",
@@ -152,28 +152,28 @@
     "allocator": "musl"
   },
   "synapse": {
-    "runtime": "upstream",
+    "runtime": "alpine",
     "binaries": [],
     "smoke": [
-      "python",
+      "python3",
       "-c",
       "import synapse; print(synapse.__version__)"
     ],
     "user": "991:991",
-    "allocator": "glibc"
+    "allocator": "musl"
   },
   "matrix-authentication-service": {
-    "runtime": "upstream",
+    "runtime": "alpine",
     "binaries": [],
     "smoke": [
       "/usr/local/bin/mas-cli",
       "--version"
     ],
     "user": "65532:65532",
-    "allocator": "glibc"
+    "allocator": "musl"
   },
   "home-assistant": {
-    "runtime": "upstream",
+    "runtime": "alpine",
     "binaries": [],
     "smoke": [
       "python3",
@@ -185,17 +185,17 @@
     "allocator": "musl"
   },
   "openthread-border-router": {
-    "runtime": "upstream",
+    "runtime": "alpine",
     "binaries": [],
     "smoke": [
       "/usr/sbin/otbr-agent",
       "--version"
     ],
     "user": "65532:65532",
-    "allocator": "glibc"
+    "allocator": "musl"
   },
   "eclipse-mosquitto": {
-    "runtime": "upstream",
+    "runtime": "alpine",
     "binaries": [],
     "smoke": [
       "/usr/sbin/mosquitto",
@@ -204,24 +204,27 @@
     "user": "1883:1883",
     "allocator": "musl"
   },
-  "python-matter-server": {
-    "runtime": "upstream",
-    "binaries": [],
-    "smoke": [
-      "matter-server",
-      "--help"
-    ],
-    "user": "65532:65532",
-    "allocator": "glibc"
-  },
   "vaultwarden": {
-    "runtime": "upstream",
+    "runtime": "alpine",
     "binaries": [],
     "smoke": [
       "/vaultwarden",
       "--version"
     ],
     "user": "65532:65532",
-    "allocator": "glibc"
+    "allocator": "musl",
+    "allocator_note": "The upstream Alpine server is statically linked and cannot use LD_PRELOAD. The allocator protects dynamically linked helper programs only.",
+    "allocator_pid1": false
+  },
+  "matterjs-server": {
+    "runtime": "alpine",
+    "binaries": [],
+    "smoke": [
+      "node",
+      "/app/node_modules/matter-server/dist/esm/MatterServer.js",
+      "--help"
+    ],
+    "user": "65532:65532",
+    "allocator": "musl"
   }
 }

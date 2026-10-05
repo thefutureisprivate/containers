@@ -1,0 +1,1 @@
+FROM registry-1.docker.io/openthread/border-router:v2026.10.0@sha256:70d2260eb5022f4c40be4f50195a1952d49041fc766fb3b2f213b06dcdc31a18

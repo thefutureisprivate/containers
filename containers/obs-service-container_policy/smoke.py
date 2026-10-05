@@ -36,10 +36,6 @@ def expansion_smoke(name, image, common):
     if name == "matrix-authentication-service":
         podman("run", "--rm", *common, image, "config", "--help")
         return
-    if name == "python-matter-server":
-        podman("run", "--rm", *common, "--entrypoint=python3", image, "-c",
-               "import chip.native; chip.native.GetLibraryHandle(); print('Matter native SDK loaded')")
-        return
     if name in ("certspotter", "openthread-border-router"):
         return
     flags = common.copy()
@@ -53,13 +49,15 @@ def expansion_smoke(name, image, common):
     elif name == "synapse":
         flags += ["--memory=1g", "--tmpfs=/data:rw,mode=1777,size=128m",
                   "--env=SYNAPSE_SERVER_NAME=obs.invalid", "--env=SYNAPSE_REPORT_STATS=no", "--entrypoint=sh"]
-        command = ["-ec", "python /start.py generate >/tmp/generate.log 2>&1; exec python /start.py"]
+        command = ["-ec", "/usr/local/bin/synapse-start generate >/tmp/generate.log 2>&1; exec /usr/local/bin/synapse-start"]
     elif name == "home-assistant":
         flags += ["--memory=2g", "--tmpfs=/config:rw,mode=1777,size=128m", "--entrypoint=sh"]
         command = ["-ec", "printf 'http:\\n' > /config/configuration.yaml; "
                    "exec python3 -P -m homeassistant --config /config --skip-pip"]
     elif name == "vaultwarden":
         flags += ["--tmpfs=/data:rw,mode=1777,size=128m", "--env=ROCKET_WORKERS=2"]
+    elif name == "matterjs-server":
+        flags += ["--tmpfs=/data:rw,mode=1777,size=128m", "--env=BLUETOOTH_ADAPTER_ID=none"]
     else:
         raise ValueError("Missing smoke test for " + name)
     container = podman("run", "--detach", *flags, image, *command, capture=True).strip()
@@ -79,7 +77,7 @@ def expansion_smoke(name, image, common):
             if message.strip() != "42":
                 raise ValueError("MQTT round trip failed")
         elif name == "synapse":
-            wait_for_command(container, "python", "-c",
+            wait_for_command(container, "python3", "-c",
                              "import urllib.request; assert urllib.request.urlopen('http://127.0.0.1:8008/health').status == 200")
         elif name == "home-assistant":
             wait_for_command(container, "python3", "-c",
@@ -87,8 +85,22 @@ def expansion_smoke(name, image, common):
                              "assert c.getresponse().status in (200,401,404)")
         elif name == "vaultwarden":
             wait_for_command(container, "curl", "--fail", "--silent", "http://127.0.0.1:8080/alive")
+        elif name == "matterjs-server":
+            wait_for_command(container, "node", "--input-type=module", "-e",
+                             "import net from 'node:net'; const s=net.connect(5580,'127.0.0.1',()=>s.end()); "
+                             "s.on('error',()=>process.exit(1));")
         audit_processes(container)
-        check_allocator(container)
+        if images()[name].get("allocator_pid1", True):
+            check_allocator(container)
+    except ValueError:
+        if name == "home-assistant":
+            # Only print error categories from this disposable, offline instance.
+            log = podman("logs", container, capture=True, merge_stderr=True)
+            for line in log.splitlines():
+                if re.search(r"(?:Error:|ERROR|CRITICAL)", line) and not re.search(
+                        r"password|token|secret|Authorization", line, re.I):
+                    print(line[:500], flush=True)
+        raise
     finally:
         podman("rm", "--force", "--volumes", container)
 

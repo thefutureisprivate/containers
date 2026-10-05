@@ -1,0 +1,8 @@
+{
+  "name": "obs-matterjs-server",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "matter-server": "1.4.0"
+  }
+}

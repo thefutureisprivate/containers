@@ -1,4 +1,16 @@
 <services>
+  <service name="download_url">
+    <param name="protocol">https</param>
+    <param name="host">github.com</param>
+    <param name="path">element-hq/matrix-authentication-service/archive/refs/tags/v1.26.0.tar.gz</param>
+    <param name="filename">upstream.tar.gz</param>
+  </service>
+  <service name="cargo_vendor">
+    <param name="src">upstream.tar.gz</param>
+    <param name="update">false</param>
+    <param name="respect-lockfile">true</param>
+    <param name="compression">gz</param>
+  </service>
   <service name="container_policy" mode="buildtime">
     <param name="name">matrix-authentication-service</param>
   </service>

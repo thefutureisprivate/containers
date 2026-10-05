@@ -1,0 +1,1 @@
+FROM registry-1.docker.io/kanidm/radius:1.11.2@sha256:38385f714365588f160b0329eec6298b991ddec64a260ae22de88baafcc18711

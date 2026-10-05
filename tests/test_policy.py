@@ -78,7 +78,7 @@ class PolicyTests(unittest.TestCase):
                     "postgres-exporter", "node-exporter", "alertmanager", "postgresql",
                     "certspotter", "certbot", "nginx", "element-web", "synapse",
                     "matrix-authentication-service", "home-assistant", "openthread-border-router",
-                    "eclipse-mosquitto", "python-matter-server", "vaultwarden"}
+                    "eclipse-mosquitto", "matterjs-server", "vaultwarden"}
         self.assertEqual(set(policy.images()), expected)
         for name in expected:
             policy.check_recipe(ROOT / "containers" / name, name)

@@ -16,10 +16,12 @@ import xml.etree.ElementTree as ET
 import zipfile
 
 CATALOG = Path(__file__).with_name("images.json")
-PIN = re.compile(r"^FROM ([a-z0-9./_-]+):([A-Za-z0-9_.-]+)@sha256:([0-9a-f]{64})(?: AS upstream)?$", re.M)
-ASSET = re.compile(r"^#!RemoteAsset: (https://github.com/stalwartlabs/webui/releases/download/v\d+\.\d+\.\d+/webui.zip) sha256:([0-9a-f]{64}) webui.zip$", re.M)
+PIN = re.compile(r"^FROM ([a-z0-9./_-]+):([A-Za-z0-9_.-]+)@sha256:([0-9a-f]{64})(?: AS [a-z][a-z0-9_-]*)?$", re.M)
+ASSET = re.compile(r"^#!RemoteAsset: (https://github.com/[A-Za-z0-9_./-]+) sha256:([0-9a-f]{64}) ([A-Za-z0-9][A-Za-z0-9_.-]*)$", re.M)
 INPUT_FILES = ("Containerfile", "LICENSE", "NOTICE", "enable-webui.py", "nginx.conf",
-               "default.conf", "entrypoint.sh", "src/go.mod", "src/go.sum", "src/tools.go")
+               "default.conf", "entrypoint.sh", "src/go.mod", "src/go.sum", "src/tools.go",
+               "_service", "source-lock.json", "upstream/Dockerfile", "requirements.txt",
+               "package.json", "package-lock.json", "build.sh")
 ALLOCATOR = Path("/usr/lib64/obs-hardened-malloc")
 PRELOAD = "/usr/local/lib/libhardened_malloc.so"
 
@@ -27,9 +29,13 @@ PRELOAD = "/usr/local/lib/libhardened_malloc.so"
 def assets(content):
     declarations = [line for line in content.splitlines() if line.startswith("#!RemoteAsset")]
     matches = ASSET.findall(content)
-    if len(declarations) != len(matches) or len(matches) > 1:
-        raise ValueError("Remote assets must be a release-and-SHA256-pinned Stalwart Web UI bundle")
-    return {"webui.zip": {"url": url, "sha256": digest} for url, digest in matches}
+    if len(declarations) != len(matches) or len({m[2] for m in matches}) != len(matches):
+        raise ValueError("Remote assets require unique filenames, HTTPS upstream URLs and SHA256 pins")
+    for url, _, filename in matches:
+        if filename == "webui.zip" and not re.fullmatch(
+                r"https://github.com/stalwartlabs/webui/releases/download/v\d+\.\d+\.\d+/webui.zip", url):
+            raise ValueError("Web UI must be a release-and-SHA256-pinned Stalwart bundle")
+    return {filename: {"url": url, "sha256": digest} for url, digest, filename in matches}
 
 
 def verify_assets(directory, content):
@@ -38,6 +44,8 @@ def verify_assets(directory, content):
         path = Path(directory) / filename
         if hashlib.sha256(path.read_bytes()).hexdigest() != expected["sha256"]:
             raise ValueError(f"Remote asset checksum mismatch: {filename}")
+        if filename != "webui.zip":
+            continue
         with zipfile.ZipFile(path) as archive:
             names = archive.namelist()
             if "index.html" not in names or not any(n.endswith(".js") for n in names):
@@ -53,7 +61,7 @@ def images():
 
 def recipe(directory):
     content = (Path(directory) / "Containerfile").read_text()
-    matches = PIN.findall(content)
+    matches = list(dict.fromkeys(PIN.findall(content)))
     if len(matches) != 1:
         raise ValueError("Require exactly one version-and-digest-pinned upstream image")
     registry, tag, digest = matches[0]
@@ -63,6 +71,23 @@ def recipe(directory):
         if line.startswith("FROM ") and line != "FROM scratch" and not PIN.fullmatch(line):
             raise ValueError("Unpinned FROM instruction")
     version = tag.removeprefix("v")
+    directory = Path(directory)
+    if (directory / "source-lock.json").exists():
+        lock = json.loads((directory / "source-lock.json").read_text())
+        watch = (directory / "upstream/Dockerfile").read_text()
+        expected = f"FROM {lock['upstream']}\n"
+        if watch != expected:
+            raise ValueError("Upstream release changed: run scripts/update_sources.py before merging this PR")
+        version = lock["version"]
+    if (directory / "requirements.txt").exists():
+        match = re.fullmatch(r"matrix-synapse==(\d+\.\d+\.\d+)\n?", (directory / "requirements.txt").read_text())
+        if not match:
+            raise ValueError("Synapse requires an exact release in requirements.txt")
+        version = match[1]
+    if (directory / "package.json").exists():
+        version = json.loads((directory / "package.json").read_text())["dependencies"]["matter-server"]
+        if not re.fullmatch(r"\d+\.\d+\.\d+", version):
+            raise ValueError("Matter server requires an exact npm release")
     if (Path(directory) / "src/go.mod").is_file():
         module = (Path(directory) / "src/go.mod").read_text()
         match = re.search(r"software\.sslmate\.com/src/certspotter v(\d+\.\d+\.\d+)", module)
@@ -177,6 +202,14 @@ def audit_rootfs(path, name, spec):
             bundle = archive.extractfile("usr/share/stalwart/webui.zip")
             if hashlib.file_digest(bundle, "sha256").hexdigest() != expected:
                 raise ValueError("Embedded Web UI differs from the verified OBS input")
+        if spec.get("runtime") == "alpine":
+            release = archive.extractfile("etc/os-release").read().decode()
+            if not re.search(r'^ID=[\"]?alpine[\"]?$', release, re.M):
+                raise ValueError("Runtime must be Alpine Linux")
+            if "lib/ld-musl-x86_64.so.1" not in members:
+                raise ValueError("Alpine runtime is missing its musl loader")
+            if any(p.endswith("ld-linux-x86-64.so.2") for p in members):
+                raise ValueError("Alpine runtime must not contain a glibc loader")
         if spec.get("allocator") in ("musl", "glibc"):
             provenance = json.load(archive.extractfile("usr/share/obs-container/provenance.json"))
             allocator = provenance["allocator"]
@@ -285,13 +318,14 @@ def prepare_build(name, outdir):
     outdir.mkdir(parents=True, exist_ok=True)
     allocator = prepare_allocator(name, outdir)
     generated = {}
-    if name == "certspotter":
-        candidates = list(directory.glob("*vendor.tar.gz"))
+    if name in ("certspotter", "kanidm", "kanidm-radius", "matrix-authentication-service"):
+        vendor_name = "vendor.tar.gz"
+        candidates = list(directory.glob("*" + vendor_name))
         if len(candidates) != 1:
-            raise ValueError("OBS go_modules must provide exactly one vendor archive")
-        generated["vendor.tar.gz"] = hashlib.sha256(candidates[0].read_bytes()).hexdigest()
-        if candidates[0].name != "vendor.tar.gz":
-            shutil.copyfile(candidates[0], outdir / "vendor.tar.gz")
+            raise ValueError("OBS dependency service must provide exactly one vendor archive")
+        generated[vendor_name] = hashlib.sha256(candidates[0].read_bytes()).hexdigest()
+        if candidates[0].name != vendor_name:
+            shutil.copyfile(candidates[0], outdir / vendor_name)
     info = (directory / "_scmsync.obsinfo").read_text()
     match = re.search(r"^commit: ([0-9a-f]{40,64})$", info, re.M)
     if not match:
@@ -311,7 +345,7 @@ def prepare_build(name, outdir):
     (outdir / "provenance.json").write_text(json.dumps(provenance, sort_keys=True, indent=2) + "\n")
     # The imported archive has a local tag. It has just been checked against the
     # immutable pin, including the config and uncompressed layer hashes.
-    content = content.replace(reference, reference.split("@")[0], 1)
+    content = content.replace(reference, reference.split("@")[0])
     rendered = (f"#!BuildTag: {name}:{version}-<RELEASE> {name}:{version} {name}:latest\n"
                 f"#!BuildName: {name}\n#!BuildVersion: {version.split('-')[0]}\n" + content +
                 '\nCOPY provenance.json /usr/share/obs-container/provenance.json\n' +

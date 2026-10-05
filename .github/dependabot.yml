@@ -20,8 +20,12 @@ updates:
       - /containers/home-assistant
       - /containers/openthread-border-router
       - /containers/eclipse-mosquitto
-      - /containers/python-matter-server
+      - /containers/matterjs-server
       - /containers/vaultwarden
+      - /containers/kanidm/upstream
+      - /containers/kanidm-radius/upstream
+      - /containers/matrix-authentication-service/upstream
+      - /containers/openthread-border-router/upstream
     schedule:
       interval: daily
       time: "06:00"
@@ -47,3 +51,21 @@ updates:
     open-pull-requests-limit: 10
     commit-message:
       prefix: "Update Cert Spotter"
+  - package-ecosystem: npm
+    directory: /containers/matterjs-server
+    schedule:
+      interval: daily
+      time: "06:00"
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "Update Matter server"
+  - package-ecosystem: pip
+    directory: /containers/synapse
+    schedule:
+      interval: daily
+      time: "06:00"
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "Update Synapse"

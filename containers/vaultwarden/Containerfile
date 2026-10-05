@@ -1,5 +1,5 @@
 # Immutable upstream input; Dependabot updates the tag and digest in PRs.
-FROM registry-1.docker.io/vaultwarden/server:1.37.3@sha256:1587c45feaa479f1f5e8af3b00eded36bff77bcf1880cf8dbf0541706dd470e0
+FROM registry-1.docker.io/vaultwarden/server:1.37.3-alpine@sha256:9a905c5cf5df61bb827da3805e160170741c0b53b0c63bb07e1afd3d2e21b1c8
 #!DisableOBSContainerSupport
 USER 0:0
 RUN find / -xdev -type f \( -perm -4000 -o -perm -2000 \) -exec chmod a-s '{}' +
@@ -11,5 +11,4 @@ COPY --chmod=0644 hardened-malloc.so /usr/local/lib/libhardened_malloc.so
 COPY --chmod=0755 allocator-check /usr/local/bin/allocator-check
 COPY --chmod=0644 hardened-malloc.LICENSE /usr/share/licenses/hardened_malloc/LICENSE
 ENV LD_PRELOAD=/usr/local/lib/libhardened_malloc.so
-COPY --chmod=0644 ld.so.preload /etc/ld.so.preload
 USER 65532:65532

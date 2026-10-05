@@ -1,5 +1,0 @@
-<services>
-  <service name="container_policy" mode="buildtime">
-    <param name="name">python-matter-server</param>
-  </service>
-</services>

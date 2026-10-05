@@ -1,10 +1,29 @@
-# Immutable upstream input; Dependabot updates the tag and digest in PRs.
-FROM ghcr.io/element-hq/matrix-authentication-service:1.26.0@sha256:e089f1048a1d4a9a492ed17b9fe759100f1bd619407b001f5927928d88b780c4
-#!DisableOBSContainerSupport
-
+#!RemoteAsset: https://github.com/element-hq/matrix-authentication-service/archive/refs/tags/v1.26.0.tar.gz sha256:57dbb7dabf98182819da16af364797ba6bc58b2b97ac5cf246740352d2c4fa60 upstream.tar.gz
+#!RemoteAsset: https://github.com/element-hq/matrix-authentication-service/releases/download/v1.26.0/mas-cli-x86_64-linux.tar.gz sha256:351d58d47dc8fb7656d1db2d6caed73915f3923297d7ec98070de52459adced0 mas-release.tar.gz
+FROM registry-1.docker.io/library/alpine:3.24.0@sha256:a2d49ea686c2adfe3c992e47dc3b5e7fa6e6b5055609400dc2acaeb241c829f4 AS builder
+RUN apk add cargo clang build-base cmake pkgconf openssl-dev
+WORKDIR /src
+COPY upstream.tar.gz vendor.tar.gz /tmp/
+RUN tar -xzf /tmp/upstream.tar.gz -C /src --strip-components=1 && tar -xzf /tmp/vendor.tar.gz -C /src \
+    && mkdir -p .cargo && printf '[source.crates-io]\nreplace-with = "vendored-sources"\n[source.vendored-sources]\ndirectory = "vendor"\n' > .cargo/config.toml
+# Dynamic musl linking allows hardened_malloc to interpose Rust's system allocator.
+ENV RUSTFLAGS="-C target-feature=-crt-static" CARGO_NET_OFFLINE=true CARGO_BUILD_JOBS=2
+ENV SQLX_OFFLINE=true
+RUN cargo build --offline --locked --release --bin mas-cli --no-default-features --features docker \
+    && strip target/release/mas-cli
+# Reuse only version-matched web assets and policy, not the release's glibc executable.
+COPY mas-release.tar.gz /tmp/
+RUN mkdir /assets && tar -xzf /tmp/mas-release.tar.gz -C /assets
+FROM registry-1.docker.io/library/alpine:3.24.0@sha256:a2d49ea686c2adfe3c992e47dc3b5e7fa6e6b5055609400dc2acaeb241c829f4
+RUN apk add ca-certificates libgcc libstdc++
+COPY --from=builder /src/target/release/mas-cli /usr/local/bin/mas-cli
+COPY --from=builder /assets/share/ /usr/local/share/mas-cli/
+COPY --from=builder /assets/LICENSE /usr/share/licenses/mas/LICENSE
+WORKDIR /
+ENTRYPOINT ["/usr/local/bin/mas-cli"]
+RUN find / -xdev -type f \( -perm -4000 -o -perm -2000 \) -exec chmod a-s '{}' +
 COPY --chmod=0644 hardened-malloc.so /usr/local/lib/libhardened_malloc.so
 COPY --chmod=0755 allocator-check /usr/local/bin/allocator-check
 COPY --chmod=0644 hardened-malloc.LICENSE /usr/share/licenses/hardened_malloc/LICENSE
 ENV LD_PRELOAD=/usr/local/lib/libhardened_malloc.so
-COPY --chmod=0644 ld.so.preload /etc/ld.so.preload
 USER 65532:65532

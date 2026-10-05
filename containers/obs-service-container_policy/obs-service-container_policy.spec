@@ -15,6 +15,7 @@ Requires:       python3-base
 Requires:       podman
 Requires:       build
 Requires:       zstd
+Requires:       apk-tools
 Requires:       obs-hardened-malloc
 BuildArch:      noarch
 
