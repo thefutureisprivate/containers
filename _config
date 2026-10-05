@@ -4,6 +4,9 @@ BuildEngine:
 %else
 Type: docker
 BuildEngine: podman
+# Alpine install_if metadata otherwise activates unrelated RPM Supplements
+# from the openSUSE build-host repositories (for example debuginfod-client).
+ExpandFlags: !dorecommends !dosupplements
 # Include the policy RPM in rebuild metadata, not only build-environment support.
 Substitute: build-packages:docker obs-container-policy-revision obs-hardened-malloc
 %endif
