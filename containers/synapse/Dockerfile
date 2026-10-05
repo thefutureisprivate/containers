@@ -71,4 +71,4 @@
 FROM registry-1.docker.io/library/alpine:3.24.0
 RUN obs_pkg_mgr add_repo http://download.opensuse.org/repositories/Alpine:/Latest/main/
 RUN obs_pkg_mgr add_repo http://download.opensuse.org/repositories/Alpine:/Latest/community/
-RUN apk add python3 python3-dev build-base musl-dev libgcc libstdc++
+RUN apk add python3 python3-dev build-base musl-dev pkgconf libgcc libstdc++

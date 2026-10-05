@@ -68,7 +68,7 @@
 FROM registry-1.docker.io/library/alpine:3.24.0@sha256:a2d49ea686c2adfe3c992e47dc3b5e7fa6e6b5055609400dc2acaeb241c829f4 AS builder
 # apk 3 uses a plain absolute path for OBS's offline repository.
 RUN sed -i 's|^file:||' /etc/apkrepos_obs_dockersupport
-RUN apk add python3 python3-dev build-base musl-dev
+RUN apk add python3 python3-dev build-base musl-dev pkgconf
 RUN python3 -m venv --without-pip /opt/venv
 ENV PATH=/opt/venv/bin:$PATH CFLAGS="-O2 -fstack-protector-strong -D_FORTIFY_SOURCE=3" LDFLAGS="-Wl,-z,relro,-z,now"
 COPY *.whl *.tar.gz requirements-runtime.txt /inputs/
