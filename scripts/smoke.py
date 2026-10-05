@@ -24,13 +24,15 @@ def wait_for_command(container, *command):
     failure = ""
     for _ in range(60):
         try:
-            return podman("exec", container, *command, capture=True, merge_stderr=True)
+            return podman("exec", container, *command, capture=True, merge_stderr=True, timeout=5)
         except subprocess.CalledProcessError as error:
             failure = (error.stdout or "").strip()[-1000:]
             state = json.loads(podman("inspect", "--format={{json .State}}", container, capture=True))
             if not state.get("Running"):
                 break
             time.sleep(1)
+        except subprocess.TimeoutExpired:
+            failure = "readiness command exceeded five seconds"
     # Bootstrap logs may contain generated credentials. Do not print them.
     raise ValueError("Container initialization/readiness failed: " + failure)
 
@@ -77,9 +79,9 @@ def smoke(name):
             print(log.replace(password, "[redacted]")[-8000:], flush=True)
             podman("top", container, "user", "pid", "args", "etime")
             try:
-                podman("exec", container, "timeout", "5", "psql", "-U", "postgres", "-Atc",
-                       "SELECT pid, wait_event_type, wait_event, state, query FROM pg_stat_activity")
-            except subprocess.CalledProcessError:
+                podman("exec", container, "psql", "-U", "postgres", "-Atc",
+                       "SELECT pid, wait_event_type, wait_event, state, query FROM pg_stat_activity", timeout=5)
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
                 pass
             raise
         finally:

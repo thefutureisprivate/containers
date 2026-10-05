@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   check:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -18,7 +18,8 @@ jobs:
       - run: make check
 
   smoke:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -32,6 +33,7 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y podman
       - run: python3 scripts/prepare.py "${{ matrix.image }}"
       - run: python3 scripts/smoke.py "${{ matrix.image }}"
+        timeout-minutes: 3
       - name: PostgreSQL runtime diagnostics
         if: failure() && matrix.image == 'postgresql'
         run: |
@@ -41,7 +43,7 @@ jobs:
   publish:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: [check, smoke]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 60
     concurrency:
       group: obs-publication

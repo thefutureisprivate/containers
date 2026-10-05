@@ -53,10 +53,10 @@ def recipe(name):
     return content, f"{registry}:{tag}@sha256:{digest}", tag.removeprefix("v")
 
 
-def podman(*args, capture=False, merge_stderr=False):
+def podman(*args, capture=False, merge_stderr=False, timeout=None):
     command = shlex.split(os.environ.get("PODMAN_COMMAND", "podman")) + list(args)
     return subprocess.run(command, check=True, text=True, stdout=subprocess.PIPE if capture else None,
-                          stderr=subprocess.STDOUT if merge_stderr else None).stdout
+                          stderr=subprocess.STDOUT if merge_stderr else None, timeout=timeout).stdout
 
 
 def runtime_config(info):
