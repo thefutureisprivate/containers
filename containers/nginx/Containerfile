@@ -1,5 +1,5 @@
 # Immutable upstream input; Dependabot updates the tag and digest in PRs.
-FROM registry-1.docker.io/library/nginx:1.30.0-alpine@sha256:0272e4604ed93c1792f03695a033a6e8546840f86e0de20a884bb17d2c924883
+FROM registry-1.docker.io/library/nginx:1.31.7-alpine@sha256:892bb2152464f0c5d8972593a5f5afaf8054552580b699d95f8ff4af08c2d33d
 #!DisableOBSContainerSupport
 USER 0:0
 RUN find / -xdev -type f \( -perm -4000 -o -perm -2000 \) -exec chmod a-s '{}' +
