@@ -2,7 +2,7 @@ module github.com/thefutureisprivate/containers/certspotter
 
 go 1.25.0
 
-require software.sslmate.com/src/certspotter v0.25.0
+require software.sslmate.com/src/certspotter v0.26.0
 
 require (
 	golang.org/x/crypto v0.52.0 // indirect
