@@ -1,1 +1,1 @@
-FROM registry-1.docker.io/kanidm/radius:1.11.2@sha256:38385f714365588f160b0329eec6298b991ddec64a260ae22de88baafcc18711
+FROM registry-1.docker.io/kanidm/radius:1.12.0@sha256:1d71a96ac441aac55d1bdca6b2056bdd2a1dbbcacd48c6247e102ac7f37d31df
