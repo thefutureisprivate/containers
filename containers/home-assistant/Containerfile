@@ -1,5 +1,5 @@
 # Immutable upstream input; Dependabot updates the tag and digest in PRs.
-FROM registry-1.docker.io/homeassistant/home-assistant:2026.9.4@sha256:3e6710a7ab2a61311d9d899b719f6c3657791c63e8f4942cec4ebc42401d6b76
+FROM registry-1.docker.io/homeassistant/home-assistant:2026.11.2@sha256:493a07e8f6530fc640223f4a0a5248f20a61ca2f718bb1d31efbf08a2c5ea28f
 #!DisableOBSContainerSupport
 USER 0:0
 RUN find / -xdev -type f \( -perm -4000 -o -perm -2000 \) -exec chmod a-s '{}' +
